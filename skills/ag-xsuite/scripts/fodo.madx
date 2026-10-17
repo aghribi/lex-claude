@@ -1,0 +1,8 @@
+kq := 0.5;
+qf: quadrupole, l=0.5, k1:=kq;
+qd: quadrupole, l=0.5, k1:=-kq;
+cell: sequence, l=10, refer=centre;
+qf, at=0.25;
+qd, at=5.25;
+endsequence;
+beam, particle=electron, energy=1.0;

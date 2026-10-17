@@ -240,6 +240,9 @@ All custom skills are prefixed `ag-` to avoid drowning in native skills or other
 - `ag-succession`: hand this session's work to a fresh, verified successor near the context limit. Persists narrow memory, composes a live briefing, then drives `succeed.sh run` to spawn a successor, have the master verify identity + project understanding, reroll on failure, and stand down once one passes. Triggered automatically by the `Stop` hook past the token threshold; also invokable by hand.
 - `ag-close`: close a work slice by hand (no successor spawned). Commit/push check, docs-in-step check, and a narrow, repo-specific project-memory update. Use on "on ferme", "wrap up", "c'est bon pour aujourd'hui".
 - `ag-co-scientist`: run a co-scientist loop on a research goal (generate, critique, pairwise-debate ranking, evolve, meta-review) with subagents. Delivers an evidence matrix, ranked hypotheses and discriminating experiments for the user to review.
+- `ag-cheetah`: Cheetah 0.8 conventions, gotchas and RL environment pattern, with `scripts/cheetah_xsuite_check.py` (Cheetah vs Xsuite agree to 1.6e-7 with `drift_kick_drift`).
+- `ag-xsuite`: Xsuite (xtrack 0.95) coordinates, Environment/twiss/match/MAD-X workflow verified by `scripts/xsuite_smoke.py`.
+- `ag-fair-data`: formats (Parquet, HDF5, openPMD, NeXus, Zarr, NetCDF), loaders, time series, ML pipelines, metadata, releases.
 - `ag-voice`: write in the user's voice. One DNA (physics does the arguing, causal chains, candid on setbacks, parentheses for precision), four registers: paper, EU proposal, French institutional, email. Calibrated on the user's corpus (`Voice.md`), which stays on their machine.
 
 ### Vendored science skills
