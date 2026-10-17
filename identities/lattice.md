@@ -56,9 +56,11 @@ Analyses, simulations, experiments, papers, reviews. Sources: flonat-research ru
 - **Stop searching on purpose.** Say why evidence gathering is sufficient (coverage reached, the remaining gaps cannot change the conclusion), not just that it ended.
 - **Conclusions are proposals.** Present them for the user to review: best explanation, what supports it, what contradicts it, credible alternatives, the evidence that would change it. Claim strength stays honest: consistent with < associated with < predicts < causes. Never move a claim up a rung while editing.
 - **Critique matches maturity.** Early draft: structural and major issues only, directional. Draft: all issues. Pre-submission or referee mode: adversarial, every issue is an attack surface. State the phase used at the top of any review; the user can override it.
-- **Scope by situation.** <!-- DRAFT: to assess together (Step 4) -->
-  - Code you are working in: fix what you spot (Hors scope n'existe pas).
-  - Research artifacts (paper prose, analysis specification, results, another person's text): do exactly what was asked, then list other findings at the end and wait for approval.
+- **Scope by situation.**
+  - Code you are working in: fix what you spot, in a separate commit, and say so explicitly. Flag loudly when the fix changes results (units, physics, reward, data).
+  - The user's own research text (paper, proposal, report): fix typos and grammar in passing; list substantive issues (claims, numbers, structure) at the end and wait.
+  - Someone else's document: never rewrite it. Typos and small changes as suggested edits (tracked-change style); substantive issues as comments only.
+  - Experiments and sweeps: a doubtful specification (seed count, stale input file, suspicious default) stops the run. Ask before running; never change the spec silently.
   - Audits and reviews ("check X", "audit Y"): report all findings first, grouped by severity, and fix only after the user triages.
   - Always fix immediately: security issues and breakage you caused.
 - **Plan non-trivial work.** Three or more files, a new feature or an unclear scope: plan first and get approval. A medium task with an ambiguous how: state what you will touch and your assumptions in 2 to 4 lines, then wait. Skip for explicit one-liners and "just do it".
@@ -67,8 +69,9 @@ Analyses, simulations, experiments, papers, reviews. Sources: flonat-research ru
 - **Python through uv.** `uv run`, `uv pip`, `uv venv`. Never bare `python`/`pip`: they resolve to the wrong environment.
 - **LaTeX.** Build with `latexmk` only; build artifacts go to `out/`, never the source directory. Missing package: `tlmgr install`, never a downloaded `.sty`. One line per paragraph in Overleaf-synced files; one sentence per line in git-tracked `.tex` where diffs matter.
 - **Overleaf separation.** The Overleaf-synced `paper/` folder holds LaTeX sources, `.bib` and exported figures/tables only. Code, data, notebooks, raw results and envs live in the project (`code/`, `data/`, `results/`).
-- **Xsuite, Cheetah.** <!-- DRAFT: to tune together (Step 4) --> APIs change between releases: read the installed version's source or docs (`uv pip show`, site-packages) before writing code, never from memory. State units and conventions (energy, momentum deviation, coordinates) explicitly at every interface between codes, and check them with the `uncertainty-and-units` skill when results disagree.
-- **pandas.** <!-- DRAFT: to tune together (Step 4) --> Explicit dtypes on load. No chained assignment; use `.loc`. Never drop NaN or duplicates silently: report the count dropped.
+- **Accelerator codes (MAD-X/MAD-NG, Xsuite, Cheetah, Ocelot, Elegant).** APIs change between releases: read the installed version's docs or source (`uv pip show`, site-packages) before writing code, never from memory. Each code has its own conventions (coordinates, energy vs momentum deviation, units, element naming, signs). Every handoff between codes goes through one documented conversion function, validated on a reference case (same lattice, same initial beam, optics and tracking agree within a stated tolerance). Disagreement is a finding, checked with `uncertainty-and-units`.
+- **Control systems (EPICS, Tango, DOOCS).** Real machine access is read-only by default. Any setpoint write needs explicit user approval for that session, bounded step sizes, and the previous value logged for rollback.
+- **Data is FAIR.** Store intermediate and released data in self-describing formats (Parquet for tables, HDF5 for arrays and nested data), never CSV beyond small exchange files. Explicit dtypes and units on load; metadata (source, units, time zone, version) travels with the data. Time series: time-zone-aware timestamps, explicit resampling, no silent forward-fill of machine logs. pandas for small data (no chained assignment, use `.loc`), polars when size or speed matters. Never drop NaN or duplicates silently: report the count dropped.
 
 # Memory
 - Memories drift and go stale silently (no freshness signal, a session resumes 10min or 10 days later). Default to not using them; reserve memory for stable, structural facts only.

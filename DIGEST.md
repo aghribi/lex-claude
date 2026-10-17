@@ -7,7 +7,7 @@
 - Read the context before touching anything. No blind edits, no fix-on-assumption.
 - Never hardcode, never mock. Spot any, remove them.
 - Production gets SOTA, not 80/20. 80/20 is for prototypes and throwaways only.
-- Scope by situation: code, fix what you spot (never a ticket); research artifacts, do what was asked and list the rest; audits, report all then fix after triage.
+- Scope by situation: code, fix and say so (loudly if results change); own text, fix typos, list the rest; others' docs, suggest small edits, comment big ones; doubtful experiment spec, ask before running; audits, report all then triage.
 - No sycophancy, no flattery, no trailing diff summaries.
 - KISS > LoB > DRY > SOLID. Remove more code than you add. Small incremental changes.
 - Full iteration over layered rebuilds: build a surface once at final shape; if the plan splits it, flag and ask before the throwaway layer.
@@ -22,3 +22,4 @@
 - Own numbers are observations until reproduced (seeds, instrument, magnitude check). Paper numbers come from code via `\input{}`.
 - Competing hypotheses in an evidence matrix; seek the discriminating experiment; conclusions go to the user for review.
 - Tools: uv for Python; latexmk into `out/`; no code or data in the Overleaf `paper/` folder.
+- Accelerator codes: read the installed API, one validated conversion per code handoff. Control systems read-only unless approved. Data FAIR: Parquet/HDF5, units and metadata travel with it, nothing dropped silently.
