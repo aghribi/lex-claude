@@ -25,7 +25,24 @@ Ground truth is the corpus listed in the user's `Voice.md` (Obsidian work vault;
 | Paper / technical note (EN) | Journals, conference proceedings, internal notes | Results first, method in the order it was done, "we". Figures and tables carry the numbers; the text says what they show. No storytelling. |
 | EU proposal (EN) | Horizon Europe Part B: excellence, impact, implementation | Structure carries it: WP, Task, Subtask labels, KPIs tagged in brackets (`[KPI 2.1]`), partners by acronym and role. "The project will", "this task will". Sequencers (firstly, secondly, finally) for arguments. One plain memorable line per section at most. Every impact claim tied to a KPI, a deliverable or a facility. British spelling (organisation, utilisation). |
 | French institutional (FR) | HDR, CNRS/DR applications, activity reports | Narrative and chronological, dated ("dès juillet 2016"). "Nous" for team work, "je" for own initiatives, coordination and the personal arc. Plain idioms allowed sparingly ("qu'à cela ne tienne"), understatement over enthusiasm. Passé composé and imparfait for the story, present for the state of things. |
-| Email / short form | Collaborators, EU officers, abstracts, forms | No corpus samples yet: ask for 3 to 5 sent emails before a long or sensitive one. Default: greeting, the fact or the ask in the first two lines, the deadline or next step, signature. Abstracts follow the paper register in 150 to 250 words. |
+| Email / short form | Collaborators, EU officers, admin, abstracts | See **Email register** below. Abstracts follow the paper register in 150 to 250 words. |
+
+## Email register
+
+Calibrated on about 7,500 sent emails since 2024 (GANIL, CERN, CNRS accounts; English 59 %, French 41 %), read through the read-only Apple Mail index. Patterns only; no email content is stored here.
+
+- **Short.** Median 76 words in English, 43 in French; 90 % under about 170. Acknowledgements are one line ("Thanks X."). The point or the ask comes in the first two lines.
+- **Shape.** Greeting, one line of context, the ask as a direct question ("Est-ce possible ?", "Can you ...?"), the next step or deadline, closing. Action items as "- " lists.
+- **Greetings.** English: "Dear <first name>," for formal, admin and external; "Hi," / "Hello" for colleagues. French: "Bonjour <prénom>," by default, "Salut <prénom>," for close colleagues, "Bonjour à tous," for groups, "Re-bonjour" for a same-day follow-up. New-year wishes in the first email of January.
+- **Closings.** English: "Best," / "Cheers," / "All the best," then "Adnan". French: "Amicalement," (colleagues), "Bonne journée," / "Bonne soirée," / "A bientôt," / "A+" (close), "Cordialement," / "Bien cordialement," (formal, admin, groups), then "Adnan". The institutional signature block is added by the mail client; never write one.
+- **Tu / vous.** "Tu" with colleagues, "vous" with administration, externals and groups. Switch to English when a recipient does not read French, and say why in one line.
+- **Politeness formulas.** "Je me permets de ...", "Pourriez-vous s'il vous plaît ...", "N'hésite pas à me dire", "Let me know if ...", "Thanks." Never effusive.
+- **Candid corrections.** A mistake is corrected in the next message, flat and short ("J'ai écrit trop vite. Désolé.").
+- **Low decoration.** Exclamation marks and smileys rare (about 5 per 10,000 words); no em dashes.
+- **Subjects.** Project tag between slashes for project mail ("/<PROJECT>/ topic", "/<CALL-ID>/ topic").
+- **Typography.** Quick English replies often carry the French space before "?" and "!"; drop it in formal English.
+
+Before sending anything drafted in this register, show it to the user; never send on their behalf.
 
 Language: write in the language of the venue. French text keeps French typography (space before `:` `;` `?` `!`, guillemets « »).
 
