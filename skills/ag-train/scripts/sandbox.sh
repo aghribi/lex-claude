@@ -8,9 +8,14 @@ LC="${LEX_CLAUDE_HOME:-$HOME/.claude/lex-claude}"
 WS="${AG_WORKSPACE:-$HOME/Documents/work_space}"
 level="${1:-}"
 [ -n "$level" ] || { echo "usage: sandbox.sh launch|rules|skills|workspace|search|accel|safety|maint|final" >&2; exit 1; }
+# Allowlist before any filesystem change: the level becomes a path that gets rm -rf'd.
+case "$level" in
+  launch|rules|skills|workspace|search|accel|safety|maint|final) ;;
+  *) echo "unknown level: $level" >&2; exit 1 ;;
+esac
 D="$HOME_T/$level"
-case "$D" in "$HOME_T"/*) ;; *) echo "refusing: $D" >&2; exit 1 ;; esac
-rm -rf "$D"; mkdir -p "$D"
+[ -L "$D" ] && { echo "refusing: $D is a symlink" >&2; exit 1; }
+rm -rf -- "$D"; mkdir -p "$D"
 
 w() { mkdir -p "$(dirname "$1")"; cat > "$1"; }
 

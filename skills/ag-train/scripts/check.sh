@@ -5,6 +5,10 @@ set -uo pipefail
 HOME_T="${AG_TRAIN_HOME:-$HOME/ag-train}"
 LC="${LEX_CLAUDE_HOME:-$HOME/.claude/lex-claude}"
 level="${1:-}"
+case "$level" in
+  launch|rules|skills|workspace|search|accel|safety|maint|final) ;;
+  *) echo "unknown level: ${level:-none}" >&2; exit 1 ;;
+esac
 D="$HOME_T/$level"
 [ -d "$D" ] || { echo "no sandbox for '$level': run sandbox.sh $level first" >&2; exit 1; }
 pass=0 fail=0
