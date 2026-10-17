@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # usage.sh — record which lex-claude capabilities actually get used, so dead
 # commands and skills can be cut with data instead of a guess. Three modes:
-#   log <source> <name>   append one event (called by the lc + pkgdev dispatchers)
+#   log <source> <name>   append one event (called by the ag + pkgdev dispatchers)
 #   hook                  PreToolUse stdin → log the Skill that fired
 #   report                tally the log, flag the never-used surface
 # Log is append-only at ~/.claude/lex-claude/usage.log (override LEX_CLAUDE_USAGE_LOG).
@@ -76,7 +76,7 @@ report_section() {
 mode_report() {
   if [ ! -s "$LOG" ]; then
     echo "usage: no events logged yet ($LOG)"
-    echo "events accrue as you run lc/pkgdev commands and invoke skills."
+    echo "events accrue as you run ag/pkgdev commands and invoke skills."
     return 0
   fi
   local total first

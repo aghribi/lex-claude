@@ -1,5 +1,5 @@
 ---
-name: lc-co-scientist
+name: ag-co-scientist
 description: Run a co-scientist loop on a research goal - generate competing hypotheses, critique them, rank them by pairwise debate, evolve the best, and deliver a reviewable research overview with an evidence matrix and discriminating experiments. Use when the user asks for hypotheses, explanations for an observation, research directions, "what could explain X", "why does the agent/beam/model do Y", or says "co-scientist" or "brainstorm hypotheses rigorously".
 ---
 

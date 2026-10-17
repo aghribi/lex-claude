@@ -9,7 +9,7 @@
 [ "${LEX_CLAUDE_DISABLE:-}" = "1" ] && exit 0
 
 # Memory slug = cwd with every "/", "." and space collapsed to "-" (same shape
-# memory.py and the lc-close skill use).
+# memory.py and the ag-close skill use).
 slug_of() { printf '%s' "$1" | sed -e 's#[/. ]#-#g'; }
 
 # Active identity as a fact, not an assertion: resolve the ~/.claude/CLAUDE.md
@@ -28,7 +28,7 @@ identity_state() {
       echo "identity: ? (unreadable symlink → $tgt)"
     fi
   elif [ -f "$link" ]; then
-    echo "identity: unmanaged (CLAUDE.md is a real file, not an lc symlink)"
+    echo "identity: unmanaged (CLAUDE.md is a real file, not an ag symlink)"
   else
     echo "identity: none (no ~/.claude/CLAUDE.md)"
   fi

@@ -15,7 +15,7 @@ elastic-substrat probe:
 
 No embeddings, stdlib only, no spawned model. The judgment (what is durable, what
 is superseded) is produced by the NORMAL Claude session, piloted by the
-`/lc-handoff` close ritual: the live assistant already holds the full session
+`/ag-handoff` close ritual: the live assistant already holds the full session
 context and persona, so it writes the memory delta and this module only does the
 deterministic bookkeeping (dedup, soft-supersede, decay, cap, persist). Fail-open:
 any error leaves the store and the handoff untouched.

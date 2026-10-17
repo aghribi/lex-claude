@@ -37,7 +37,7 @@ done
 LEX_CLAUDE_CLI="$SELF_DIR/bin/lex-claude"
 [ -x "$LEX_CLAUDE_CLI" ] || LEX_CLAUDE_CLI="$HOME/.claude/lex-claude/bin/lex-claude"
 if [ -x "$LEX_CLAUDE_CLI" ]; then
-  printf '\n===== lex-claude commands (lc) =====\n'
+  printf '\n===== lex-claude commands (ag) =====\n'
   "$LEX_CLAUDE_CLI" init claude
 fi
 
@@ -52,7 +52,7 @@ fi
 
 # The ack is an état readout the user can falsify at a glance, not ceremony.
 # identity/rules loading is verified live (the master + the
-# `lc claude` pre-flight), and work is handed to a fresh, verified successor near
+# `ag claude` pre-flight), and work is handed to a fresh, verified successor near
 # the token limit rather than persisted to a drift-prone file.
 printf '\n---\nRules and docs above are loaded; do not recite them and do not list them back. Open with the état instead: name the active identity from the live block (flag it if it reads BROKEN / unmanaged / none) and the live git line, then the next step you propose, 3 lines max.\n'
 

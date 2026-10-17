@@ -144,7 +144,7 @@ fi
 # --- spawn the neutral judge ---
 # Keep stderr: "judge spawn failed" alone is undebuggable (model alias not
 # available on this account, unsupported flag, auth...).
-errf=$(mktemp 2>/dev/null) || errf="/tmp/lc-master.$$"
+errf=$(mktemp 2>/dev/null) || errf="/tmp/ag-master.$$"
 raw=$(LEX_CLAUDE_DISABLE=1 command claude -p --output-format json \
         --no-session-persistence --model "$MODEL" "$prompt" 2>"$errf") \
   || { err=$(tail -n1 "$errf" 2>/dev/null | cut -c1-200); rm -f "$errf"; fail "judge spawn failed (model $MODEL): ${err:-no stderr}"; }

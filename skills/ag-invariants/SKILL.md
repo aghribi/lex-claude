@@ -1,5 +1,5 @@
 ---
-name: lc-invariants
+name: ag-invariants
 description: Audit a project against 15 universal production invariants. Standardised errors, secrets safety, tenant isolation, mutation feedback, idempotent migrations, non-root containers, no mocks or hardcoded values, manual deploy, billing chain, hashed public tokens, upstream-failure hides not stales, stabilised patterns promoted, lifecycle-owned resources never static, plus a host-injected kill-switch check. Use when the user asks for an audit, a pre-merge review, a production-readiness check, says "is this ready to ship", "did we forget anything", or "review this before I merge".
 ---
 

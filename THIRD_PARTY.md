@@ -30,5 +30,5 @@ The "Co-scientist" section of `RULES.md` condenses rules from flonat-research (d
 - `obra/brainstorming`: its trigger ("MUST use before any creative work") hijacks ordinary tasks; overlaps `scientific-brainstorming`.
 - `obra/writing-plans`: depends on other superpowers skills; covered by the plan-first rule and plan mode.
 - `K-Dense/research-lookup`: requires a paid OpenRouter or Parallel key.
-- [Kaimen-Inc/Co-Scientist](https://github.com/Kaimen-Inc/Co-Scientist) (Apache-2.0): full Python reimplementation of Google's co-scientist (SQLite queue, Elo tournament, FAISS). Usable as a heavy engine through its `claude -p` backend. `lc-co-scientist` runs the same loop with Claude Code subagents instead.
+- [Kaimen-Inc/Co-Scientist](https://github.com/Kaimen-Inc/Co-Scientist) (Apache-2.0): full Python reimplementation of Google's co-scientist (SQLite queue, Elo tournament, FAISS). Usable as a heavy engine through its `claude -p` backend. `ag-co-scientist` runs the same loop with Claude Code subagents instead.
 - [panjose/Co-Scientist](https://github.com/panjose/Co-Scientist) `co-scientist-run`: only drives that repo's own pipeline.

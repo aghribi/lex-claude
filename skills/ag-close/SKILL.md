@@ -1,6 +1,6 @@
 ---
-name: lc-close
-description: Close a work slice cleanly. Verify commit/push state, check docs are in step, and update the narrow persistent project memory. Use when the user says "on ferme", "wrap up", "c'est bon pour aujourd'hui", "close the session", or before stepping away from a work slice. This is the manual close ritual; it does not spawn a successor (that is lc-succession, for the context-full handoff).
+name: ag-close
+description: Close a work slice cleanly. Verify commit/push state, check docs are in step, and update the narrow persistent project memory. Use when the user says "on ferme", "wrap up", "c'est bon pour aujourd'hui", "close the session", or before stepping away from a work slice. This is the manual close ritual; it does not spawn a successor (that is ag-succession, for the context-full handoff).
 ---
 
 Closing a slice by hand. Three steps.

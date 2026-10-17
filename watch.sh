@@ -7,7 +7,7 @@
 #                 the FileChanged handler only forwards watchPaths + systemMessages),
 #                 so the honest ceiling is a "your loaded rules are stale, reload" nudge.
 # Watched surface is deliberately narrow: only config that changes on an explicit
-# `lc identity` / `lc rules sync` / `lc lang`. Project CLAUDE.md and docs are edited
+# `ag identity` / `ag rules sync` / `ag lang`. Project CLAUDE.md and docs are edited
 # constantly; nudging on every save would be noise.
 # Kill switch: LEX_CLAUDE_DISABLE=1 → silent no-op. Needs jq; no-op without it.
 

@@ -1,5 +1,5 @@
 ---
-name: lc-succession
+name: ag-succession
 description: Hand this session's work to a fresh, verified successor when the context nears its limit. The Stop hook triggers this automatically past the token threshold (default 600k); it is also invokable by hand ("hand off", "succeed this session", "spawn a successor"). Composes a live briefing, spawns a fresh Claude Code session, has the master verify it loaded identity + rules AND understood the project, rerolls a fresh one on any failure, and stands down once a successor passes.
 ---
 

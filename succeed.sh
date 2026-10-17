@@ -121,11 +121,11 @@ open_successor() {
   qdir=$(printf '%s' "$dir" | sed "s/'/'\\\\''/g")
   {
     printf '#!/bin/bash\n'
-    # lc claude passes --resume through with the pinned model + permission flags,
+    # ag claude passes --resume through with the pinned model + permission flags,
     # so predecessor and successor run in the same mode (cross-session messages
     # between different permission modes are held for approval). Raw claude if
-    # lc is not on PATH.
-    printf "cd '%s' && exec /bin/zsh -lic 'if command -v lc >/dev/null 2>&1; then lc claude --resume %s%s; else claude --resume %s%s; fi'\n" "$qdir" "$id" "$kick" "$id" "$kick"
+    # ag is not on PATH.
+    printf "cd '%s' && exec /bin/zsh -lic 'if command -v ag >/dev/null 2>&1; then ag claude --resume %s%s; else claude --resume %s%s; fi'\n" "$qdir" "$id" "$kick" "$id" "$kick"
   } > "$launcher" && chmod +x "$launcher" || { echo "   open: cannot write launcher $launcher" >&2; return 1; }
   case "$app" in
     cmux)
@@ -172,7 +172,7 @@ case "${1:-}" in
         rm -f "$WATCH_DIR/$session".* 2>/dev/null
       else
         left=$((left-1)); printf '%s\n' "$left" > "$WATCH_DIR/$session.left"
-        turn=$(mktemp 2>/dev/null) || turn="/tmp/lc-watch.$$"
+        turn=$(mktemp 2>/dev/null) || turn="/tmp/ag-watch.$$"
         render_turn "$transcript" > "$turn"
         verdict=""; pass=""
         if [ -s "$turn" ]; then
@@ -207,7 +207,7 @@ case "${1:-}" in
 
     touch "$LATCH_DIR/$session" 2>/dev/null || true
     k=$(( tokens / 1000 )); tk=$(( threshold / 1000 ))
-    jq -n --arg r "HANDOFF DUE: context at ${k}k tokens (threshold ${tk}k). Invoke the lc-succession skill now: compose a live briefing, spawn and verify a successor, then stand down. Do not keep working in this session." \
+    jq -n --arg r "HANDOFF DUE: context at ${k}k tokens (threshold ${tk}k). Invoke the ag-succession skill now: compose a live briefing, spawn and verify a successor, then stand down. Do not keep working in this session." \
       '{decision:"block", reason:$r}'
     ;;
 
@@ -232,7 +232,7 @@ case "${1:-}" in
     case "$MAX" in *[!0-9]*|"") MAX=3 ;; esac
     WATCH="${LEX_CLAUDE_WATCH_TURNS:-3}"
     case "$WATCH" in *[!0-9]*|"") WATCH=3 ;; esac
-    tmp=$(mktemp -d 2>/dev/null) || tmp="/tmp/lc-succ.$$"
+    tmp=$(mktemp -d 2>/dev/null) || tmp="/tmp/ag-succ.$$"
     mkdir -p "$tmp" 2>/dev/null || true
     pdir=$(projects_dir "$PWD")
 
@@ -329,7 +329,7 @@ the user outranks both). When it tells you it is standing down, carry on alone."
     WATCH="${LEX_CLAUDE_WATCH_TURNS:-3}"
     case "$WATCH" in *[!0-9]*|"") WATCH=3 ;; esac
     t="$(projects_dir "$PWD")/$id.jsonl"
-    fifo="$(mktemp -u 2>/dev/null || echo "/tmp/lc-peek.$$")"
+    fifo="$(mktemp -u 2>/dev/null || echo "/tmp/ag-peek.$$")"
     mkfifo "$fifo" || { echo "succeed.sh peek: mkfifo failed" >&2; exit 1; }
     tail -n 0 -F "$t" > "$fifo" 2>/dev/null & tailpid=$!
     trap 'kill "$tailpid" 2>/dev/null; rm -f "$fifo"' EXIT

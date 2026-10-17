@@ -1,5 +1,5 @@
 ---
-name: lc-review-project
+name: ag-review-project
 description: Read project docs (CLAUDE.md + docs/PHILOSOPHY, PRINCIPLES, INVARIANTS, OPS, TODO) and produce a sharp summary of state and next actions in under 25 lines. Use when the user asks "where are we on this project", "give me a status", "catch me up", "what's the state", comes back to a project after time away, or wants a fast read of project context before diving in.
 ---
 

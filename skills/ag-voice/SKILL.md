@@ -31,7 +31,7 @@ Language: write in the language of the venue. French text keeps French typograph
 
 ## Anti-LLM pass (before showing any draft)
 
-Adapted from the lex-claude `lc-voice` checklist, calibrated on this corpus:
+Adapted from the lex-claude `lc-voice` checklist (MagicLex upstream), calibrated on this corpus:
 
 1. Swap long words for short ones where meaning holds.
 2. Keep median sentence length near 18 to 22 words; vary it hard (a 35-word technical sentence next to a 6-word conclusion).

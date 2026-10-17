@@ -1,5 +1,5 @@
 ---
-name: lc-docs-init
+name: ag-docs-init
 description: Scaffold the lex-claude doc layout (PHILOSOPHY, CONTEXT, PRINCIPLES, INVARIANTS, OPS, TODO) in $PWD/docs/. Creates only missing files with minimal headers, never overwrites. Use when bootstrapping documentation in a new or undocumented project, or when the user says "scaffold our docs", "set up the docs structure", "we need docs in this project", or "give me a docs skeleton".
 ---
 
@@ -80,4 +80,4 @@ Files and headers (today's date in `TODO.md` only):
   ## Next
   ```
 
-After scaffolding, list what was created vs skipped, one line each. Stop. Do not propose to fill the content — point the user at `lc-docs-cleanup` later when they want to audit it.
+After scaffolding, list what was created vs skipped, one line each. Stop. Do not propose to fill the content — point the user at `ag-docs-cleanup` later when they want to audit it.

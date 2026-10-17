@@ -10,7 +10,7 @@ CLONE_BASE="${PKGDEV_HOME:-${TMPDIR:-/tmp}/pkgdev}"
 die() { echo "error: $*" >&2; exit 1; }
 need() { command -v "$1" >/dev/null 2>&1 || die "$1 not found in PATH"; }
 
-# usage trace. share lex-claude's logger so 'lc usage' sees pkgdev too.
+# usage trace. share lex-claude's logger so 'ag usage' sees pkgdev too.
 USAGE_SH="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." 2>/dev/null && pwd)/usage.sh"
 [ -f "$USAGE_SH" ] || USAGE_SH="$HOME/.claude/lex-claude/usage.sh"
 log_usage() { [ -f "$USAGE_SH" ] && bash "$USAGE_SH" log pkgdev "$1" 2>/dev/null || true; }

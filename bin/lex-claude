@@ -8,7 +8,7 @@ CLAUDE_DIR="$HOME/.claude"
 SETTINGS="$CLAUDE_DIR/settings.json"
 BIN_DIR="$HOME/.local/bin"
 BIN_LINK="$BIN_DIR/lex-claude"
-BIN_ALIAS="$BIN_DIR/lc"
+BIN_ALIAS="$BIN_DIR/ag"
 BIN_PKG="$BIN_DIR/pkgdev"
 CODEX_DIR="${CODEX_DIR:-$HOME/.codex}"
 AGENTS_LINK="$CODEX_DIR/AGENTS.md"
@@ -48,7 +48,7 @@ auto_update() {
   [ "$local_sha" = "$remote_sha" ] && return 0
   echo "lex-claude: newer version on origin. updating..."
   reset_managed_tree
-  git -C "$INSTALL_DIR" pull --ff-only --quiet 2>/dev/null || { echo "lex-claude: auto-update failed (non-ff or conflict). run 'lc update' manually" >&2; return 0; }
+  git -C "$INSTALL_DIR" pull --ff-only --quiet 2>/dev/null || { echo "lex-claude: auto-update failed (non-ff or conflict). run 'ag update' manually" >&2; return 0; }
   # Deploy via the freshly pulled binary, not the stale in-memory functions.
   "$INSTALL_DIR/bin/lex-claude" __deploy >/dev/null
   echo "lex-claude: updated, re-running."
@@ -85,13 +85,13 @@ Usage:
   lex-claude codex [prompt]                          Launch Codex with active identity + project docs injected as the initial prompt.
   lex-claude codex --print [prompt]                  Print the prompt that would be sent to Codex.
   lex-claude claude [args...]                        Launch Claude Code with a verified cold-start: pre-flight a fresh session against the master before handing over the seat (bounded reroll + self-heal). Alias 'claude' to it to make it your default. Skip: LEX_CLAUDE_COLDSTART_DISABLE=1.
-  lex-claude init zsh|bash                           Output shell completion. Add to rc: eval "\$(lc init zsh)".
+  lex-claude init zsh|bash                           Output shell completion. Add to rc: eval "\$(ag init zsh)".
   lex-claude init claude                             Print the context the SessionStart hook loads into Claude Code.
   lex-claude usage                                   Report which commands/skills get used (and which never do). Debloat aid.
   lex-claude doctor             Sanity-check the install.
   lex-claude version            Print install version (commit count + date).
 
-Sibling binary (deployed alongside lc):
+Sibling binary (deployed alongside ag):
   pkgdev <pkg>@<branch>         Clone a package branch, editable install (uv pip install -e). Short names: xtrack, cheetah, ...
   pkgdev <owner/repo>@<branch>  Same, from any GitHub repo or git URL.
   pkgdev --quick <spec>         Skip clone: uv pip install --force-reinstall git+...@branch.
@@ -124,7 +124,7 @@ wire_statusline() {
     *) echo "statusline: custom command in $SETTINGS (kept). to use lex-claude's, set: $cmd"; return 0 ;;
   esac
 
-  local out; out=$(mktemp 2>/dev/null) || out="/tmp/lc-settings-sl.$$"
+  local out; out=$(mktemp 2>/dev/null) || out="/tmp/ag-settings-sl.$$"
   if jq --arg cmd "$cmd" '.statusLine = {"type":"command","command":$cmd}' "$SETTINGS" > "$out" \
      && mv "$out" "$SETTINGS"; then
     echo "statusline: wired"
@@ -149,7 +149,7 @@ wire_hook() {
   mkdir -p "$(dirname "$SETTINGS")" 2>/dev/null || true
 
   if [ ! -f "$SETTINGS" ]; then
-    local tmp; tmp=$(mktemp 2>/dev/null) || tmp="/tmp/lc-settings.$$"
+    local tmp; tmp=$(mktemp 2>/dev/null) || tmp="/tmp/ag-settings.$$"
     if ! { echo '{}' > "$tmp" && mv "$tmp" "$SETTINGS"; } 2>/dev/null; then
       echo "warn: cannot write $SETTINGS (open-create blocked by fs?). hook NOT wired."
       echo "diag: $(ls -la "$(dirname "$SETTINGS")" 2>&1 | head -3 | tr '\n' '|')"
@@ -161,7 +161,7 @@ wire_hook() {
   local bak="$SETTINGS.bak.$(date +%s)"
   cp "$SETTINGS" "$bak" 2>/dev/null || true
 
-  local out; out=$(mktemp 2>/dev/null) || out="/tmp/lc-settings-out.$$"
+  local out; out=$(mktemp 2>/dev/null) || out="/tmp/ag-settings-out.$$"
   if jq --arg cmd "$cmd" --arg wcmd "$wcmd" --arg ucmd "$ucmd" --arg dcmd "$dcmd" --arg scmd "$scmd" --arg sucmd "$sucmd" '
     .hooks //= {} |
     .hooks.SessionStart //= [] |
@@ -222,7 +222,7 @@ wire_hook() {
 }
 
 # Mirror the active identity to Codex's global AGENTS.md so AGENTS.md-aware
-# harnesses (Codex, etc.) load the same rules natively, no `lc codex` wrapper.
+# harnesses (Codex, etc.) load the same rules natively, no `ag codex` wrapper.
 # Follows the CLAUDE.md symlink so it stays in sync on install/update/switch.
 sync_agents_md() {
   local src; src=$(readlink "$CLAUDE_DIR/CLAUDE.md" 2>/dev/null || true)
@@ -290,7 +290,7 @@ deploy() {
 
   ln -sfn "$INSTALL_DIR/bin/lex-claude" "$BIN_LINK"
   ln -sfn "$INSTALL_DIR/bin/lex-claude" "$BIN_ALIAS"
-  echo "cli: $BIN_LINK (alias: lc)"
+  echo "cli: $BIN_LINK (alias: ag)"
 
   if [ -x "$INSTALL_DIR/bin/pkgdev" ]; then
     ln -sfn "$INSTALL_DIR/bin/pkgdev" "$BIN_PKG"
@@ -309,10 +309,10 @@ deploy() {
   fi
 
   ensure_path_in_rc || true
-  _ensure_claude_fn || true   # route `claude` → `lc claude` (cold-start check) always
+  _ensure_claude_fn || true   # route `claude` → `ag claude` (cold-start check) always
 
-  wire_hook || echo "note: hook wiring skipped. cli works. run 'lc doctor' to investigate."
-  wire_statusline || echo "note: statusline wiring skipped. run 'lc doctor' to investigate."
+  wire_hook || echo "note: hook wiring skipped. cli works. run 'ag doctor' to investigate."
+  wire_statusline || echo "note: statusline wiring skipped. run 'ag doctor' to investigate."
 }
 
 deploy_pkg_only() {
@@ -354,7 +354,7 @@ cmd_install() {
   [ -f "$SETTINGS" ] && needs_prompt=1
 
   if [ $needs_prompt -eq 1 ] && [ $yes -eq 0 ]; then
-    echo "lc install will modify these existing files (backups will be created):"
+    echo "ag install will modify these existing files (backups will be created):"
     [ -e "$CLAUDE_DIR/CLAUDE.md" ] && [ ! -L "$CLAUDE_DIR/CLAUDE.md" ] && echo "  - $CLAUDE_DIR/CLAUDE.md → backup + replace with symlink to managed identity"
     [ -e "$CLAUDE_DIR/statusline-command.sh" ] && [ ! -L "$CLAUDE_DIR/statusline-command.sh" ] && echo "  - $CLAUDE_DIR/statusline-command.sh → backup + replace with symlink to managed script"
     [ -f "$SETTINGS" ] && echo "  - $SETTINGS → backup + jq-patch SessionStart hook + statusLine"
@@ -461,7 +461,7 @@ identity_new() {
     echo "created with shared rules: $file"
   fi
   echo "next:   \$EDITOR $file"
-  echo "switch: lc identity $name"
+  echo "switch: ag identity $name"
 
   if [ -d "$INSTALL_DIR/.git" ]; then
     if git -C "$INSTALL_DIR" add "identities/$name.md" \
@@ -469,7 +469,7 @@ identity_new() {
       if git -C "$INSTALL_DIR" push -q 2>/dev/null; then
         echo "git:    committed + pushed to origin"
       else
-        echo "git:    committed locally (push failed. no remote perms? run 'git -C $INSTALL_DIR push' manually, or: lc github-login --token <TOKEN>)"
+        echo "git:    committed locally (push failed. no remote perms? run 'git -C $INSTALL_DIR push' manually, or: ag github-login --token <TOKEN>)"
       fi
     fi
   fi
@@ -483,7 +483,7 @@ cmd_rules() {
       local base="$INSTALL_DIR"
       if [ "${1:-}" = "--repo" ]; then
         base="${2:-$PWD}"
-        [ -d "$base/identities" ] || die "no identities/ under $base (run from your lex-claude checkout, or: lc rules sync --repo <dir>)"
+        [ -d "$base/identities" ] || die "no identities/ under $base (run from your lex-claude checkout, or: ag rules sync --repo <dir>)"
         [ -f "$base/RULES.md" ] || die "no RULES.md under $base"
       fi
       sync_rules "$base"
@@ -501,7 +501,7 @@ cmd_lang() {
       else
         echo "lang: off"
       fi
-      echo "switch: lc lang en|fr|off"
+      echo "switch: ag lang en|fr|off"
       ;;
     en|fr)
       mkdir -p "$(dirname "$LANG_FILE")" 2>/dev/null || true
@@ -581,12 +581,12 @@ _strip_rc_block() {
 
 _claude_fn_block() {
   cat <<'BLOCK'
-# lex-claude claude router v3 — routes `claude` through `lc claude` so every
+# lex-claude claude router v3 — routes `claude` through `ag claude` so every
 # interactive launch gets the cold-start identity/rules check. Model and skip
-# flags are applied by `lc claude` itself. `command claude` bypasses this.
+# flags are applied by `ag claude` itself. `command claude` bypasses this.
 # Terminals that ship their own claude wrapper (cmux) redefine claude() after
 # this rc runs, so the router is re-installed before each command (zsh preexec,
-# bash PROMPT_COMMAND). `lc claude` resolves claude via PATH, so the terminal's
+# bash PROMPT_COMMAND). `ag claude` resolves claude via PATH, so the terminal's
 # shim still wraps the real binary.
 _lc_claude_router() {
   claude() { command lex-claude claude "$@"; }
@@ -617,7 +617,7 @@ _ensure_claude_fn() {
     _strip_rc_block "$rc" "$SKIP_BEGIN_OLD" "$SKIP_END_OLD"
   fi
   # Current version present? Done. A stale (pre-router) block gets replaced so an
-  # existing install picks up the routing on the next `lc update`.
+  # existing install picks up the routing on the next `ag update`.
   if [ -f "$rc" ] && grep -Fq "$FN_BEGIN" "$rc"; then
     grep -Fq "$FN_MARK" "$rc" && return 0
     _strip_rc_block "$rc" "$FN_BEGIN" "$FN_END"
@@ -676,7 +676,7 @@ cmd_skip() {
       ;;
     status|"")
       [ -f "$SKIP_FILE" ] && echo "skip: on" || echo "skip: off"
-      echo "toggle: lc skip on|off"
+      echo "toggle: ag skip on|off"
       ;;
     *) die "unknown skip arg: $1 (expected: on, off, status)" ;;
   esac
@@ -691,7 +691,7 @@ cmd_model() {
       else
         echo "model: default"
       fi
-      echo "pin: lc model <name>    list: lc model list    clear: lc model off"
+      echo "pin: ag model <name>    list: ag model list    clear: ag model off"
       ;;
     list)
       local current="default"
@@ -852,7 +852,7 @@ cmd_github_login() {
   if [ -n "$ssh_user" ]; then
     git config --global "url.git@github.com:.insteadOf" "https://github.com/"
     echo "git: ssh agent answers as $ssh_user. https github remotes rewritten to ssh (nothing stored)."
-    echo "gh: api not authenticated. for headless gh set GH_TOKEN, or run 'lc github-login' from a terminal."
+    echo "gh: api not authenticated. for headless gh set GH_TOKEN, or run 'ag github-login' from a terminal."
     github_set_identity "$ssh_user"
     return 0
   fi
@@ -892,7 +892,7 @@ _awake_lid_on() {
   [ -t 0 ] || die "awake --lid: first run installs a sudoers rule and needs your sudo password. run it once in a terminal"
   echo "awake: --lid installs $LID_RULE (one-time), allowing only 'pmset -a disablesleep 0|1' without a password"
   local tmp; tmp=$(mktemp)
-  printf '%s\n' "# managed by lex-claude (lc awake --lid)" \
+  printf '%s\n' "# managed by lex-claude (ag awake --lid)" \
     "$(id -un) ALL=(root) NOPASSWD: /usr/bin/pmset -a disablesleep 0, /usr/bin/pmset -a disablesleep 1" > "$tmp"
   visudo -cf "$tmp" >/dev/null || { rm -f "$tmp"; die "awake --lid: generated sudoers rule failed visudo validation"; }
   sudo install -m 0440 -o root -g wheel "$tmp" "$LID_RULE" || { rm -f "$tmp"; die "awake --lid: could not install $LID_RULE"; }
@@ -944,14 +944,14 @@ cmd_awake() {
       ;;
     -h|--help|help)
       cat <<'EOF'
-lc awake. keep this Mac from sleeping while idle.
+ag awake. keep this Mac from sleeping while idle.
 
 Usage:
-  lc awake [duration]        run until duration elapses (default: until 'lc awake off')
-  lc awake --while <pid>     stay awake while <pid> is alive
-  lc awake --lid [...]       same, and keep running with the lid closed
-  lc awake off               stop the active assertion
-  lc awake status            show whether an assertion is held
+  ag awake [duration]        run until duration elapses (default: until 'ag awake off')
+  ag awake --while <pid>     stay awake while <pid> is alive
+  ag awake --lid [...]       same, and keep running with the lid closed
+  ag awake off               stop the active assertion
+  ag awake status            show whether an assertion is held
 
 Duration:
   Examples: 30m, 2h, 1h30m, 45s, or raw seconds. Empty = no timeout.
@@ -1040,7 +1040,7 @@ EOF
     nohup bash -c 'caffeinate "$@" & c=$!
       trap "kill $c 2>/dev/null" TERM INT
       wait $c; wait $c 2>/dev/null
-      sudo -n /usr/bin/pmset -a disablesleep 0' lc-awake "${args[@]}" >/dev/null 2>&1 &
+      sudo -n /usr/bin/pmset -a disablesleep 0' ag-awake "${args[@]}" >/dev/null 2>&1 &
   else
     nohup caffeinate "${args[@]}" >/dev/null 2>&1 &
   fi
@@ -1060,7 +1060,7 @@ EOF
     [ -z "$human" ] && human="${seconds}s"
     echo "awake: pid $pid, for $human"
   else
-    echo "awake: pid $pid, no timeout. stop with: lc awake off"
+    echo "awake: pid $pid, no timeout. stop with: ag awake off"
   fi
 }
 
@@ -1074,16 +1074,16 @@ cmd_codex() {
       --full) context_mode="full"; shift ;;
       -h|--help|help)
       cat <<'EOF'
-lc codex. launch Codex with lex-claude context preloaded.
+ag codex. launch Codex with lex-claude context preloaded.
 
 Usage:
-  lc codex [--lite|--full] [prompt]
-  lc codex --print [--lite|--full] [prompt]
+  ag codex [--lite|--full] [prompt]
+  ag codex --print [--lite|--full] [prompt]
 
 Behavior:
   Builds the same context as the Claude SessionStart hook.
-  --full loads: active identity, project CLAUDE.md, docs/*, lc command reference, and lang.
-  --lite loads: active identity, project CLAUDE.md, lc command reference, and lang.
+  --full loads: active identity, project CLAUDE.md, docs/*, ag command reference, and lang.
+  --lite loads: active identity, project CLAUDE.md, ag command reference, and lang.
   Then launches `codex` with that bundle as the initial prompt.
 EOF
       return
@@ -1120,8 +1120,8 @@ cmd_init() {
   case "${1:-help}" in
     zsh)
       cat <<'EOF'
-# lex-claude zsh completion. Add to ~/.zshrc: eval "$(lc init zsh)"
-_lc() {
+# lex-claude zsh completion. Add to ~/.zshrc: eval "$(ag init zsh)"
+_ag() {
   local -a cmds awake_cmds init_cmds identity_cmds rules_cmds codex_cmds install_cmds model_cmds lang_cmds skip_cmds
   cmds=(
     'install:bootstrap clone + symlinks + hooks'
@@ -1168,20 +1168,20 @@ _lc() {
       ;;
   esac
 }
-compdef _lc lc
-compdef _lc lex-claude
+compdef _ag ag
+compdef _ag lex-claude
 EOF
       ;;
     bash)
       cat <<'EOF'
-# lex-claude bash completion. Add to ~/.bashrc: eval "$(lc init bash)"
-_lc() {
+# lex-claude bash completion. Add to ~/.bashrc: eval "$(ag init bash)"
+_ag() {
   local cur prev cmds
   cur="${COMP_WORDS[COMP_CWORD]}"
   prev="${COMP_WORDS[COMP_CWORD-1]}"
   cmds="install update identity rules model lang skip github-login awake codex claude init usage doctor version"
   case "$prev" in
-    lc|lex-claude) COMPREPLY=( $(compgen -W "$cmds" -- "$cur") ) ;;
+    ag|lex-claude) COMPREPLY=( $(compgen -W "$cmds" -- "$cur") ) ;;
     install)       COMPREPLY=( $(compgen -W "--yes --pkg-only" -- "$cur") ) ;;
     awake)         COMPREPLY=( $(compgen -W "off status help --while --lid" -- "$cur") ) ;;
     codex)         COMPREPLY=( $(compgen -W "--print --lite --full help" -- "$cur") ) ;;
@@ -1193,16 +1193,16 @@ _lc() {
     skip)          COMPREPLY=( $(compgen -W "on off status" -- "$cur") ) ;;
   esac
 }
-complete -F _lc lc
-complete -F _lc lex-claude
+complete -F _ag ag
+complete -F _ag lex-claude
 EOF
       ;;
     claude)
       cat <<'EOF'
-The user has `lc` (alias of `lex-claude`) installed locally. It manages the
+The user has `ag` (alias of `lex-claude`) installed locally. It manages the
 global Claude Code config: identity, rules, hooks, skills, statusline.
 
-Available subcommands (run with `lc <cmd>`):
+Available subcommands (run with `ag <cmd>`):
 
 - `identity`                                  list identities (active marked *)
 - `identity <name>`                           switch active identity
@@ -1231,7 +1231,7 @@ Available subcommands (run with `lc <cmd>`):
 - `update`                                    pull latest + redeploy
 - `version`                                   print install version
 
-Sibling binary `pkgdev` (deployed alongside `lc`, points a Python package
+Sibling binary `pkgdev` (deployed alongside `ag`, points a Python package
 in the active env at a git branch):
 
 - `pkgdev <pkg>@<branch>`                      clone the branch, editable install (short names: xtrack, xpart, xobjects, xfields, xdeps, xwakes, xcoll, cheetah)
@@ -1239,11 +1239,11 @@ in the active env at a git branch):
 - `pkgdev --quick <spec>`                      skip clone: uv pip install --force-reinstall git+...@branch
 - `pkgdev --release <pkg>`                     back to the PyPI release
 - `pkgdev --status <pkg>`                      installed version and source
-- `lc install --pkg-only`                      install just `pkgdev` (no identity/rules/skills/hook)
+- `ag install --pkg-only`                      install just `pkgdev` (no identity/rules/skills/hook)
 
 Notes:
-- Plain `lc awake` does not survive closing the lid: caffeinate assertions do
-  not cover it. `lc awake --lid` does (pmset disablesleep, verified on Apple
+- Plain `ag awake` does not survive closing the lid: caffeinate assertions do
+  not cover it. `ag awake --lid` does (pmset disablesleep, verified on Apple
   Silicon on battery) and reverts it when the assertion ends (off, timeout,
   --while pid exit). Its first run installs /etc/sudoers.d/lex-claude-pmset,
   which allows only `pmset -a disablesleep 0|1` without a password; that one
@@ -1257,10 +1257,10 @@ Notes:
   (LEX_CLAUDE_DIGEST_EVERY, default 5) to keep the rules salient in long
   sessions. Treat it as recall, not new instructions.
 - Session flow: identity/rules loading is verified live by a "master" judge
-  (master.sh), a neutral session spawned on demand. Cold start goes through 'lc claude', which pre-flights a fresh session
+  (master.sh), a neutral session spawned on demand. Cold start goes through 'ag claude', which pre-flights a fresh session
   against the master before handing over the seat (bounded reroll + self-heal on
   failure). Near the token limit (LEX_CLAUDE_HANDOFF_TOKENS, default 600000) a
-  Stop hook (succeed.sh check) triggers the lc-succession skill: it spawns a
+  Stop hook (succeed.sh check) triggers the ag-succession skill: it spawns a
   fresh successor, the master verifies identity + project understanding, rerolls
   a fresh one on any failure, opens the verified one in a new terminal window
   with a kickoff prompt (it starts working on its own), and stands down. In continue mode the master then watches the successor's
@@ -1275,15 +1275,15 @@ EOF
       ;;
     help|-h|--help|"")
       cat <<EOF
-lc init. shell completion and Claude Code context dump.
+ag init. shell completion and Claude Code context dump.
 
 Usage:
-  lc init zsh       output zsh completion. Add to ~/.zshrc:
-                      eval "\$(lc init zsh)"
-  lc init bash      output bash completion. Add to ~/.bashrc:
-                      eval "\$(lc init bash)"
-  lc init claude    print the lex-claude command reference. The SessionStart
-                    hook auto-injects this so Claude Code knows about \`lc\`
+  ag init zsh       output zsh completion. Add to ~/.zshrc:
+                      eval "\$(ag init zsh)"
+  ag init bash      output bash completion. Add to ~/.bashrc:
+                      eval "\$(ag init bash)"
+  ag init claude    print the lex-claude command reference. The SessionStart
+                    hook auto-injects this so Claude Code knows about \`ag\`
                     in every session. Run manually for inspection or piping.
 EOF
       ;;
@@ -1322,7 +1322,7 @@ cmd_doctor() {
   if [ -L "$AGENTS_LINK" ] && [ -e "$AGENTS_LINK" ]; then
     echo "ok    AGENTS.md → $(readlink "$AGENTS_LINK")"
   else
-    echo "warn  codex AGENTS.md not linked (run 'lc update')"
+    echo "warn  codex AGENTS.md not linked (run 'ag update')"
   fi
   for skill in "$INSTALL_DIR"/skills/*/; do
     [ -d "$skill" ] || continue
@@ -1338,30 +1338,30 @@ cmd_doctor() {
   fi
   grep -q "statusline-command.sh" "$SETTINGS" 2>/dev/null && echo "ok    statusline wired" || echo "warn  statusline not wired in $SETTINGS"
   [ -L "$BIN_LINK" ] && echo "ok    cli ($BIN_LINK)" || { echo "fail  cli not symlinked"; ok=0; }
-  [ -L "$BIN_ALIAS" ] && echo "ok    alias lc → lex-claude" || { echo "fail  alias 'lc' not symlinked"; ok=0; }
+  [ -L "$BIN_ALIAS" ] && echo "ok    alias ag → lex-claude" || { echo "fail  alias 'ag' not symlinked"; ok=0; }
   if [ -L "$BIN_PKG" ] && [ -e "$BIN_PKG" ]; then
     echo "ok    pkgdev ($BIN_PKG)"
   else
-    echo "warn  pkgdev not symlinked (run 'lc update' or 'lc install --pkg-only')"
+    echo "warn  pkgdev not symlinked (run 'ag update' or 'ag install --pkg-only')"
   fi
   ensure_path_in_rc || ok=0
-  _hook_wired "lex-claude/usage" && echo "ok    usage hook wired" || echo "warn  usage hook not wired (skill tracking off). run 'lc update'"
-  _hook_wired "lex-claude/digest" && echo "ok    digest hook wired" || echo "warn  digest hook not wired (rules recall off). run 'lc update'"
-  _hook_wired "lex-claude/style" && echo "ok    style hook wired" || echo "warn  style hook not wired (em-dash check off). run 'lc update'"
-  _hook_wired "lex-claude/succeed" && echo "ok    succession trigger wired (Stop → succeed.sh check)" || echo "warn  succession trigger not wired (token handoff off). run 'lc update'"
-  { [ -x "$INSTALL_DIR/master.sh" ] && [ -x "$INSTALL_DIR/succeed.sh" ]; } && echo "ok    master.sh + succeed.sh present" || echo "warn  master.sh/succeed.sh missing (succession broken). run 'lc update'"
+  _hook_wired "lex-claude/usage" && echo "ok    usage hook wired" || echo "warn  usage hook not wired (skill tracking off). run 'ag update'"
+  _hook_wired "lex-claude/digest" && echo "ok    digest hook wired" || echo "warn  digest hook not wired (rules recall off). run 'ag update'"
+  _hook_wired "lex-claude/style" && echo "ok    style hook wired" || echo "warn  style hook not wired (em-dash check off). run 'ag update'"
+  _hook_wired "lex-claude/succeed" && echo "ok    succession trigger wired (Stop → succeed.sh check)" || echo "warn  succession trigger not wired (token handoff off). run 'ag update'"
+  { [ -x "$INSTALL_DIR/master.sh" ] && [ -x "$INSTALL_DIR/succeed.sh" ]; } && echo "ok    master.sh + succeed.sh present" || echo "warn  master.sh/succeed.sh missing (succession broken). run 'ag update'"
   command -v jq >/dev/null 2>&1 && echo "ok    jq present" || echo "warn  jq missing (cold-start check + succession judge run unverified). install jq"
   case "$(command claude auth status 2>/dev/null | jq -r '.loggedIn | tostring' 2>/dev/null)" in
     true)  echo "ok    claude logged in" ;;
     false) echo "warn  claude not logged in (cold-start check + succession judge cannot run). run 'claude auth login'" ;;
     *)     echo "ok    claude auth: unknown (old claude or no jq)" ;;
   esac
-  [ -f "$INSTALL_DIR/DIGEST.md" ] && echo "ok    DIGEST.md present" || echo "warn  DIGEST.md missing (digest hook is a no-op). run 'lc update'"
+  [ -f "$INSTALL_DIR/DIGEST.md" ] && echo "ok    DIGEST.md present" || echo "warn  DIGEST.md missing (digest hook is a no-op). run 'ag update'"
   [ -f "$MODEL_FILE" ] && echo "ok    model pinned: $(cat "$MODEL_FILE")" || echo "ok    model: default"
   [ -f "$SKIP_FILE" ] && echo "ok    skip: on" || echo "ok    skip: off"
   if command -v pmset >/dev/null 2>&1; then
-    [ -f "$LID_RULE" ] && echo "ok    awake --lid rule ($LID_RULE)" || echo "ok    awake --lid: not set up (first 'lc awake --lid' installs the rule)"
-    _sleep_disabled && echo "warn  SleepDisabled is 1: the lid will not sleep this Mac. 'lc awake status' shows if lc holds it"
+    [ -f "$LID_RULE" ] && echo "ok    awake --lid rule ($LID_RULE)" || echo "ok    awake --lid: not set up (first 'ag awake --lid' installs the rule)"
+    _sleep_disabled && echo "warn  SleepDisabled is 1: the lid will not sleep this Mac. 'ag awake status' shows if ag holds it"
   fi
   [ $ok -eq 1 ] && echo "all good." || { echo "issues. run: lex-claude install"; exit 1; }
 }
@@ -1369,7 +1369,7 @@ cmd_doctor() {
 cmd_usage() {
   local script="$SELF_DIR/usage.sh"
   [ -x "$script" ] || script="$INSTALL_DIR/usage.sh"
-  [ -x "$script" ] || die "usage.sh not found (run 'lc update')"
+  [ -x "$script" ] || die "usage.sh not found (run 'ag update')"
   bash "$script" report
 }
 
@@ -1380,12 +1380,12 @@ _coldstart_heal() {
   tgt=$(readlink "$link" 2>/dev/null || true)
   name=$(basename "$tgt" .md 2>/dev/null)
   if [ -n "$name" ] && [ -f "$INSTALL_DIR/identities/$name.md" ]; then
-    ln -sfn "$INSTALL_DIR/identities/$name.md" "$link" 2>/dev/null && echo "lc: re-pointed identity → $name" >&2
+    ln -sfn "$INSTALL_DIR/identities/$name.md" "$link" 2>/dev/null && echo "ag: re-pointed identity → $name" >&2
   fi
   return 0
 }
 
-# lc claude — cold-start supervisor. A hook cannot restart its own session, so
+# ag claude — cold-start supervisor. A hook cannot restart its own session, so
 # the launcher owns the gate, and it verifies the REAL session, not a proxy: it
 # runs the identity/rules self-report as turn 1 of a fresh persisted session, has
 # the master judge THAT turn, rerolls a fresh session on failure (bounded), and
@@ -1423,14 +1423,14 @@ cmd_claude() {
   # No auth → every -p turn returns an error blob, subject and judge alike.
   # Rerolling cannot fix that; hand the seat over so claude runs its login flow.
   if [ "$("$claude_bin" auth status 2>/dev/null | jq -r '.loggedIn | tostring' 2>/dev/null)" = "false" ]; then
-    echo "lc: claude is not logged in. Skipping the cold-start check. Log in, then relaunch." >&2
+    echo "ag: claude is not logged in. Skipping the cold-start check. Log in, then relaunch." >&2
     exec "$claude_bin" ${_f[@]+"${_f[@]}"} "$@"
   fi
 
   local max="${LEX_CLAUDE_SUCCESSION_MAX:-3}"; case "$max" in *[!0-9]*|"") max=3 ;; esac
   local link="$CLAUDE_DIR/CLAUDE.md"
   local pdir="$HOME/.claude/projects/$(printf '%s' "$PWD" | sed 's#[^A-Za-z0-9]#-#g')"
-  local tmp; tmp=$(mktemp 2>/dev/null) || tmp="/tmp/lc-preflight.$$"
+  local tmp; tmp=$(mktemp 2>/dev/null) || tmp="/tmp/ag-preflight.$$"
   local prompt="In 6 lines max: state your identity (name) and your core non-negotiable rules, in your own words."
 
   local attempt=1 uuid
@@ -1438,11 +1438,11 @@ cmd_claude() {
     # Cheap floor first: a broken identity symlink means nothing will load. Heal
     # and retry before spending a turn.
     if [ ! -L "$link" ] || [ ! -e "$link" ]; then
-      echo "lc: identity symlink missing/broken ($link), attempt $attempt/$max." >&2
+      echo "ag: identity symlink missing/broken ($link), attempt $attempt/$max." >&2
       _coldstart_heal "$link"; attempt=$((attempt+1)); continue
     fi
     uuid=$(uuidgen 2>/dev/null || cat /proc/sys/kernel/random/uuid 2>/dev/null)
-    [ -n "$uuid" ] || { echo "lc: no uuid source; launching raw." >&2; rm -f "$tmp"; exec "$claude_bin" ${_f[@]+"${_f[@]}"} "$@"; }
+    [ -n "$uuid" ] || { echo "ag: no uuid source; launching raw." >&2; rm -f "$tmp"; exec "$claude_bin" ${_f[@]+"${_f[@]}"} "$@"; }
     # Verify the REAL session: run the identity self-report as turn 1 of the
     # persisted session, judge THAT turn. set -e/pipefail: a failed turn rerolls.
     # Keep the failure reason: a silent 3/3 reroll is undebuggable.
@@ -1450,7 +1450,7 @@ cmd_claude() {
     # -p reports API/auth failures as {"is_error":true,"result":"<message>"} with
     # exit 0. That is not identity drift: judging it or rerolling is pointless.
     if [ "$(jq -r '.is_error // false' "$tmp.raw" 2>/dev/null)" = "true" ]; then
-      echo "lc: preflight turn errored: $(jq -r '.result // empty' "$tmp.raw" | head -c 200). Launching unverified." >&2
+      echo "ag: preflight turn errored: $(jq -r '.result // empty' "$tmp.raw" | head -c 200). Launching unverified." >&2
       rm -f "$tmp" "$tmp.err" "$tmp.raw" "$pdir/$uuid.jsonl" 2>/dev/null || true
       exec "$claude_bin" ${_f[@]+"${_f[@]}"} "$@"
     fi
@@ -1465,13 +1465,13 @@ cmd_claude() {
     else
       reason="master: $(printf '%s' "$reason" | jq -r '.reason // empty' 2>/dev/null || printf '%s' "$reason")"
     fi
-    echo "lc: cold-start check failed (attempt $attempt/$max): $reason. Rerolling a fresh session." >&2
+    echo "ag: cold-start check failed (attempt $attempt/$max): $reason. Rerolling a fresh session." >&2
     rm -f "$pdir/$uuid.jsonl" 2>/dev/null || true    # discard the rejected session
     _coldstart_heal "$link"
     attempt=$((attempt+1))
   done
   rm -f "$tmp" "$tmp.err" "$tmp.raw"
-  echo "lc: WARNING: cold-start verification failed $max times. Identity load looks structurally broken; run 'lc doctor'. Launching anyway (unverified)." >&2
+  echo "ag: WARNING: cold-start verification failed $max times. Identity load looks structurally broken; run 'ag doctor'. Launching anyway (unverified)." >&2
   exec "$claude_bin" ${_f[@]+"${_f[@]}"} "$@"
 }
 
