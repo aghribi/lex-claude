@@ -1458,19 +1458,21 @@ cmd_claude() {
     local reason
     if [ ! -s "$tmp" ]; then
       reason="preflight turn produced no answer: $(tail -n1 "$tmp.err" 2>/dev/null || echo 'no stderr')"
-    elif reason=$("$master" verify --answer "$tmp" --phase identity 2>/dev/null); then
-      rm -f "$tmp" "$tmp.err" "$tmp.raw"
+    elif reason=$("$master" verify --answer "$tmp" --phase identity 2>"$tmp.merr"); then
+      rm -f "$tmp" "$tmp.err" "$tmp.raw" "$tmp.merr"
       # Hand over the verified session itself; your work continues as turn 2+.
       exec "$claude_bin" ${_f[@]+"${_f[@]}"} --resume "$uuid" "$@"
     else
       reason="master: $(printf '%s' "$reason" | jq -r '.reason // empty' 2>/dev/null || printf '%s' "$reason")"
+      # An empty verdict means the judge itself broke: show why instead of "master: ."
+      [ "$reason" = "master: " ] && reason="master error: $(tail -n1 "$tmp.merr" 2>/dev/null | cut -c1-200)"
     fi
     echo "ag: cold-start check failed (attempt $attempt/$max): $reason. Rerolling a fresh session." >&2
     rm -f "$pdir/$uuid.jsonl" 2>/dev/null || true    # discard the rejected session
     _coldstart_heal "$link"
     attempt=$((attempt+1))
   done
-  rm -f "$tmp" "$tmp.err" "$tmp.raw"
+  rm -f "$tmp" "$tmp.err" "$tmp.raw" "$tmp.merr"
   echo "ag: WARNING: cold-start verification failed $max times. Identity load looks structurally broken; run 'ag doctor'. Launching anyway (unverified)." >&2
   exec "$claude_bin" ${_f[@]+"${_f[@]}"} "$@"
 }

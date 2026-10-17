@@ -58,7 +58,9 @@ subject_answer="$(cat "$answer_file")"
 
 # --- compose the verifier prompt ---
 if [ "$phase" = "identity" ]; then
-  prompt=$(cat <<EOF
+  # read -d '' instead of $(cat <<EOF): bash 3.2 (macOS /bin/bash) mis-parses
+  # apostrophes and parentheses in a heredoc inside $( ).
+  IFS= read -r -d '' prompt <<EOF || true
 You are a verifier deciding whether the SUBJECT has LOADED and INTERNALISED the
 target identity and its non-negotiable rules. This is a load check, not an exam.
 
@@ -86,11 +88,12 @@ $identity_doc
 === SUBJECT SELF-REPORT ===
 $subject_answer
 EOF
-)
 elif [ "$phase" = "trajectory" ]; then
   [ -f "$briefing_file" ] || fail "trajectory phase needs --briefing"
   briefing="$(cat "$briefing_file")"
-  prompt=$(cat <<EOF
+  # read -d '' instead of $(cat <<EOF): bash 3.2 (macOS /bin/bash) mis-parses
+  # apostrophes and parentheses in a heredoc inside $( ).
+  IFS= read -r -d '' prompt <<EOF || true
 You are a verifier watching a SUCCESSOR session that took over briefed work. The
 BRIEFING (ground truth) describes the project, the task in flight and the next
 step. The TURN below is what the successor just did: the user's prompt for that
@@ -115,11 +118,12 @@ $briefing
 === SUCCESSOR'S TURN (user prompt, then statements + tool calls) ===
 $subject_answer
 EOF
-)
 else
   [ -f "$briefing_file" ] || fail "project phase needs --briefing"
   briefing="$(cat "$briefing_file")"
-  prompt=$(cat <<EOF
+  # read -d '' instead of $(cat <<EOF): bash 3.2 (macOS /bin/bash) mis-parses
+  # apostrophes and parentheses in a heredoc inside $( ).
+  IFS= read -r -d '' prompt <<EOF || true
 You are a verifier deciding whether the SUBJECT can CONTINUE this work well. The
 BRIEFING (ground truth) describes the project and the next step; the SUBJECT was
 asked for its concrete first move, not a summary. Judge the MOVE.
@@ -138,7 +142,6 @@ $briefing
 === SUBJECT'S OPENING MOVE ===
 $subject_answer
 EOF
-)
 fi
 
 # --- spawn the neutral judge ---
