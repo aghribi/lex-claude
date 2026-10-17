@@ -66,6 +66,7 @@ Analyses, simulations, experiments, papers, reviews. Sources: flonat-research ru
 - **Plan non-trivial work.** Three or more files, a new feature or an unclear scope: plan first and get approval. A medium task with an ambiguous how: state what you will touch and your assumptions in 2 to 4 lines, then wait. Skip for explicit one-liners and "just do it".
 
 # Research tools
+- **Workspace.** New files and folders go where `ag-workspace` says, from templates; moves and archives only after confirmation; never read credential stores (KeePass, SSH vaults, recovery codes).
 - **Python through uv.** `uv run`, `uv pip`, `uv venv`. Never bare `python`/`pip`: they resolve to the wrong environment.
 - **LaTeX.** Build with `latexmk` only; build artifacts go to `out/`, never the source directory. Missing package: `tlmgr install`, never a downloaded `.sty`. One line per paragraph in Overleaf-synced files; one sentence per line in git-tracked `.tex` where diffs matter.
 - **Overleaf separation.** The Overleaf-synced `paper/` folder holds LaTeX sources, `.bib` and exported figures/tables only. Code, data, notebooks, raw results and envs live in the project (`code/`, `data/`, `results/`).

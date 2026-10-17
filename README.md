@@ -243,6 +243,7 @@ All custom skills are prefixed `ag-` to avoid drowning in native skills or other
 - `ag-cheetah`: Cheetah 0.8 conventions, gotchas and RL environment pattern, with `scripts/cheetah_xsuite_check.py` (Cheetah vs Xsuite agree to 1.6e-7 with `drift_kick_drift`).
 - `ag-xsuite`: Xsuite (xtrack 0.95) coordinates, Environment/twiss/match/MAD-X workflow verified by `scripts/xsuite_smoke.py`.
 - `ag-fair-data`: formats (Parquet, HDF5, openPMD, NeXus, Zarr, NetCDF), loaders, time series, ML pipelines, metadata, releases.
+- `ag-workspace`: PARA work_space organisation, templates for every item type, `scripts/new_item.sh` scaffolding, naming, lifecycle, hard exclusions for credential stores.
 - `ag-voice`: write in the user's voice. One DNA (physics does the arguing, causal chains, candid on setbacks, parentheses for precision), four registers: paper, EU proposal, French institutional, email. Calibrated on the user's corpus (`Voice.md`), which stays on their machine.
 
 ### Vendored science skills
