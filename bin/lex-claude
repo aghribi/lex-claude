@@ -342,7 +342,7 @@ cmd_install() {
       git -C "$INSTALL_DIR" pull --ff-only
     else
       mkdir -p "$(dirname "$INSTALL_DIR")"
-      git clone "$REPO_URL" "$INSTALL_DIR"
+      clone_install
     fi
     deploy_pkg_only
     echo "done. pkgdev only (no identity/rules/skills/hook touched)."
@@ -373,7 +373,7 @@ cmd_install() {
     git -C "$INSTALL_DIR" pull --ff-only
   else
     mkdir -p "$(dirname "$INSTALL_DIR")"
-    git clone "$REPO_URL" "$INSTALL_DIR"
+    clone_install
   fi
 
   if [ "${LEX_CLAUDE_INSTALL_REEXEC:-}" != "1" ] && [ -x "$INSTALL_DIR/bin/lex-claude" ]; then
@@ -394,6 +394,19 @@ cmd_update() {
   # Re-exec the freshly pulled binary for the deploy. Calling the in-memory
   # deploy would run the pre-pull functions (stale wire_hook, etc).
   exec "$INSTALL_DIR/bin/lex-claude" __deploy
+}
+
+# Clone into a temp dir, then swap in. A fresh INSTALL_DIR may already hold
+# state (usage.log written by the logger before the first clone); keep it.
+clone_install() {
+  local tmp="$INSTALL_DIR.clone.$$"
+  rm -rf "$tmp"
+  git clone "$REPO_URL" "$tmp" || { rm -rf "$tmp"; die "clone failed: $REPO_URL"; }
+  if [ -d "$INSTALL_DIR" ]; then
+    cp -Rn "$INSTALL_DIR"/. "$tmp"/ 2>/dev/null || true
+    rm -rf "$INSTALL_DIR"
+  fi
+  mv "$tmp" "$INSTALL_DIR"
 }
 
 sync_rules() {
