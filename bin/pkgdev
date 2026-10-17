@@ -1,0 +1,128 @@
+#!/usr/bin/env bash
+# pkgdev. point a Python package in the active env at a git branch.
+# Two modes:
+#   default  clone the branch, editable install (uv pip install -e)
+#   --quick  no clone: uv pip install --force-reinstall git+...@branch
+set -euo pipefail
+
+CLONE_BASE="${PKGDEV_HOME:-${TMPDIR:-/tmp}/pkgdev}"
+
+die() { echo "error: $*" >&2; exit 1; }
+need() { command -v "$1" >/dev/null 2>&1 || die "$1 not found in PATH"; }
+
+# usage trace. share lex-claude's logger so 'lc usage' sees pkgdev too.
+USAGE_SH="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." 2>/dev/null && pwd)/usage.sh"
+[ -f "$USAGE_SH" ] || USAGE_SH="$HOME/.claude/lex-claude/usage.sh"
+log_usage() { [ -f "$USAGE_SH" ] && bash "$USAGE_SH" log pkgdev "$1" 2>/dev/null || true; }
+
+# short name -> owner/repo PyPI-name
+alias_of() {
+  case "$1" in
+    xtrack|xpart|xobjects|xfields|xdeps|xwakes|xcoll) echo "xsuite/$1 $1" ;;
+    cheetah) echo "desy-ml/cheetah cheetah-accelerator" ;;
+    *) return 1 ;;
+  esac
+}
+
+usage() {
+  cat <<EOF
+pkgdev. point a Python package in the active env at a git branch.
+
+Usage:
+  pkgdev <pkg|owner/repo|git-url>@<branch>   clone the branch, editable install
+  pkgdev --quick <spec>                      no clone: uv pip install --force-reinstall git+...@branch
+  pkgdev --release <pkg>                     back to the PyPI release
+  pkgdev --status <pkg>                      show the installed version and where it comes from
+
+Short names: xtrack xpart xobjects xfields xdeps xwakes xcoll (xsuite/*), cheetah (desy-ml/cheetah).
+
+Examples:
+  pkgdev xtrack@main
+  pkgdev cheetah@my-fix
+  pkgdev someone/xfields@feature --quick
+  pkgdev --release xtrack
+
+Env:
+  PKGDEV_HOME   clone base dir (default: \$TMPDIR/pkgdev)
+
+Runs in the active environment (uv targets the activated venv or ./.venv).
+EOF
+}
+
+# repo spec -> "url pypi-name"
+resolve() {
+  local r="$1" a
+  if a=$(alias_of "$r"); then
+    echo "https://github.com/${a% *} ${a#* }"
+    return
+  fi
+  case "$r" in
+    *://*|git@*) local n="${r%.git}"; echo "$r ${n##*/}" ;;
+    */*)         echo "https://github.com/$r ${r##*/}" ;;
+    *)           die "unknown package '$r': use owner/repo or a git url" ;;
+  esac
+}
+
+pypi_name() {
+  local a n="${1%.git}"
+  if a=$(alias_of "$1"); then echo "${a#* }"; else echo "${n##*/}"; fi
+}
+
+status() {
+  [ -n "${1:-}" ] || die "usage: pkgdev --status <pkg>"
+  uv pip show "$(pypi_name "$1")" 2>/dev/null | grep -E '^(Name|Version|Location|Editable project location):' \
+    || echo "$1: not installed in this env"
+}
+
+run() {
+  local quick=0 spec=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --quick|-q) quick=1; shift ;;
+      -*) die "unknown flag: $1" ;;
+      *)  [ -z "$spec" ] || die "too many args (got '$spec' then '$1')"; spec="$1"; shift ;;
+    esac
+  done
+  [ -n "$spec" ] || { usage; exit 1; }
+  case "$spec" in *@*) ;; *) die "missing @<branch> in '$spec'" ;; esac
+
+  need uv
+  need git
+  [ "$quick" -eq 1 ] && log_usage quick || log_usage run
+
+  local repo="${spec%@*}" branch="${spec##*@}" url name resolved
+  resolved=$(resolve "$repo") || exit 1
+  read -r url name <<<"$resolved"
+
+  if [ "$quick" -eq 1 ]; then
+    echo "pkgdev: force-reinstall $name from $url@$branch (no clone)"
+    uv pip install --force-reinstall "$name @ git+${url}@${branch}"
+    status "$repo"
+    return 0
+  fi
+
+  local dest="$CLONE_BASE/$(basename "${url%.git}")@${branch//\//_}"
+  mkdir -p "$CLONE_BASE"
+  if [ -d "$dest/.git" ]; then
+    echo "pkgdev: refresh $dest"
+    git -C "$dest" fetch --quiet origin "$branch"
+    git -C "$dest" checkout --quiet "$branch"
+    git -C "$dest" reset --hard --quiet "origin/$branch"
+  else
+    rm -rf "$dest"
+    echo "pkgdev: clone $url@$branch"
+    git clone --quiet -b "$branch" "$url" "$dest"
+  fi
+
+  echo "pkgdev: editable install $dest"
+  uv pip install -e "$dest"
+  status "$repo"
+}
+
+case "${1:-}" in
+  -h|--help|help|"") usage ;;
+  --status)          log_usage status; shift; status "${1:-}" ;;
+  --release)         log_usage release; shift; [ -n "${1:-}" ] || die "usage: pkgdev --release <pkg>"
+                     need uv; uv pip install --force-reinstall "$(pypi_name "$1")"; status "$1" ;;
+  *)                 run "$@" ;;
+esac

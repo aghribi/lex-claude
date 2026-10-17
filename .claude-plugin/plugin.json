@@ -1,10 +1,10 @@
 {
   "name": "lex-claude",
-  "description": "Personal Claude Code skills: invariant audits, project review, doc scaffolding, senior-level exploration. Skills are namespaced under /lex-claude:lc-*.",
+  "description": "Claude Code skills: co-scientist research workflow (hypotheses, evidence, literature, writing, review, RL/optimization), invariant audits, project review, doc scaffolding. Fork of MagicLex/lex-claude.",
   "author": {
-    "name": "MagicLex",
-    "url": "https://github.com/MagicLex"
+    "name": "aghribi",
+    "url": "https://github.com/aghribi"
   },
-  "homepage": "https://github.com/MagicLex/lex-claude",
-  "repository": "https://github.com/MagicLex/lex-claude"
+  "homepage": "https://github.com/aghribi/lex-claude",
+  "repository": "https://github.com/aghribi/lex-claude"
 }

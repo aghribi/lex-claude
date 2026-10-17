@@ -2,14 +2,14 @@
 # lex-claude. manage global Claude Code config (identity, hook, skills).
 set -euo pipefail
 
-REPO_URL="${LEX_CLAUDE_REPO:-https://github.com/MagicLex/lex-claude.git}"
+REPO_URL="${LEX_CLAUDE_REPO:-https://github.com/aghribi/lex-claude.git}"
 INSTALL_DIR="$HOME/.claude/lex-claude"
 CLAUDE_DIR="$HOME/.claude"
 SETTINGS="$CLAUDE_DIR/settings.json"
 BIN_DIR="$HOME/.local/bin"
 BIN_LINK="$BIN_DIR/lex-claude"
 BIN_ALIAS="$BIN_DIR/lc"
-BIN_HOPS="$BIN_DIR/hopsdev"
+BIN_PKG="$BIN_DIR/pkgdev"
 CODEX_DIR="${CODEX_DIR:-$HOME/.codex}"
 AGENTS_LINK="$CODEX_DIR/AGENTS.md"
 CODEX_SKILLS_DIR="$CODEX_DIR/skills"
@@ -61,7 +61,7 @@ lex-claude. global Claude Code and Codex config manager
 
 Usage:
   lex-claude install [--yes]    Bootstrap: clone, symlink CLAUDE.md and AGENTS.md, wire Claude hooks, deploy skills for Claude Code and Codex. Prompts before overwriting existing files; --yes / LEX_CLAUDE_YES=1 skips the prompt.
-  lex-claude install --hops-only    Install only the hopsdev binary + PATH. Touches no identity/rules/skills/hook.
+  lex-claude install --pkg-only     Install only the pkgdev binary + PATH. Touches no identity/rules/skills/hook.
   lex-claude update             Pull latest and re-deploy.
   lex-claude identity                                List identities (active marked *).
   lex-claude identity <name>                         Switch active identity.
@@ -92,11 +92,11 @@ Usage:
   lex-claude version            Print install version (commit count + date).
 
 Sibling binary (deployed alongside lc):
-  hopsdev <branch>              Clone a hopsworks-api branch, editable install (uv pip install -e), relink skills.
-  hopsdev <owner/repo>@<branch> Same, from a different fork.
-  hopsdev --quick <spec>        Skip clone: uv pip install --force-reinstall git+...@branch.
-  hopsdev --status              Show where 'hops' resolves now.
-  hopsdev init [dir]            Clone logicalclocks/workspaces into [dir] (default ./workspaces).
+  pkgdev <pkg>@<branch>         Clone a package branch, editable install (uv pip install -e). Short names: xtrack, cheetah, ...
+  pkgdev <owner/repo>@<branch>  Same, from any GitHub repo or git URL.
+  pkgdev --quick <spec>         Skip clone: uv pip install --force-reinstall git+...@branch.
+  pkgdev --release <pkg>        Back to the PyPI release.
+  pkgdev --status <pkg>         Show the installed version and where it comes from.
 EOF
 }
 
@@ -292,9 +292,9 @@ deploy() {
   ln -sfn "$INSTALL_DIR/bin/lex-claude" "$BIN_ALIAS"
   echo "cli: $BIN_LINK (alias: lc)"
 
-  if [ -x "$INSTALL_DIR/bin/hopsdev" ]; then
-    ln -sfn "$INSTALL_DIR/bin/hopsdev" "$BIN_HOPS"
-    echo "cli: $BIN_HOPS (hopsworks-api branch switcher)"
+  if [ -x "$INSTALL_DIR/bin/pkgdev" ]; then
+    ln -sfn "$INSTALL_DIR/bin/pkgdev" "$BIN_PKG"
+    echo "cli: $BIN_PKG (Python package branch switcher)"
   fi
 
   local sl_target="$CLAUDE_DIR/statusline-command.sh"
@@ -315,28 +315,28 @@ deploy() {
   wire_statusline || echo "note: statusline wiring skipped. run 'lc doctor' to investigate."
 }
 
-deploy_hops_only() {
-  # Lean install: only the hopsdev binary + PATH. Touches no CLAUDE.md,
+deploy_pkg_only() {
+  # Lean install: only the pkgdev binary + PATH. Touches no CLAUDE.md,
   # skills, hook, or statusline. For teammates who just want the branch
   # switcher without the rest of lex-claude.
   mkdir -p "$BIN_DIR"
-  [ -x "$INSTALL_DIR/bin/hopsdev" ] || die "hopsdev not found in $INSTALL_DIR/bin"
-  ln -sfn "$INSTALL_DIR/bin/hopsdev" "$BIN_HOPS"
-  echo "cli: $BIN_HOPS (hopsworks-api branch switcher)"
+  [ -x "$INSTALL_DIR/bin/pkgdev" ] || die "pkgdev not found in $INSTALL_DIR/bin"
+  ln -sfn "$INSTALL_DIR/bin/pkgdev" "$BIN_PKG"
+  echo "cli: $BIN_PKG (Python package branch switcher)"
   ensure_path_in_rc || true
 }
 
 cmd_install() {
-  local yes=0 hops_only=0
+  local yes=0 pkg_only=0
   for arg in "$@"; do
     case "$arg" in
       --yes|-y) yes=1 ;;
-      --hops-only) hops_only=1 ;;
+      --pkg-only) pkg_only=1 ;;
     esac
   done
   [ "${LEX_CLAUDE_YES:-}" = "1" ] && yes=1
 
-  if [ $hops_only -eq 1 ]; then
+  if [ $pkg_only -eq 1 ]; then
     if [ -d "$INSTALL_DIR/.git" ]; then
       reset_managed_tree
       git -C "$INSTALL_DIR" pull --ff-only
@@ -344,8 +344,8 @@ cmd_install() {
       mkdir -p "$(dirname "$INSTALL_DIR")"
       git clone "$REPO_URL" "$INSTALL_DIR"
     fi
-    deploy_hops_only
-    echo "done. hopsdev only (no identity/rules/skills/hook touched)."
+    deploy_pkg_only
+    echo "done. pkgdev only (no identity/rules/skills/hook touched)."
     exit 0
   fi
 
@@ -1130,7 +1130,7 @@ _lc() {
   awake_cmds=('off:stop' 'status:inspect' 'help:show help' '--while:tie to a pid' '--lid:also stay awake lid-closed')
   codex_cmds=('--print:dump the generated prompt' '--lite:load identity + project CLAUDE.md only' '--full:load full docs bundle' 'help:show help')
   init_cmds=('zsh:zsh completion' 'bash:bash completion' 'claude:dump SessionStart context')
-  install_cmds=('--yes:skip overwrite prompt' '--hops-only:install only the hopsdev binary')
+  install_cmds=('--yes:skip overwrite prompt' '--pkg-only:install only the pkgdev binary')
   identity_cmds=('new:create a new identity')
   rules_cmds=('sync:re-inject RULES.md')
   model_cmds=('list:interactive model picker' 'off:clear pin (back to default)' 'sonnet:Claude Sonnet' 'opus:Claude Opus' 'haiku:Claude Haiku' 'fable:Claude Fable')
@@ -1169,7 +1169,7 @@ _lc() {
   cmds="install update identity rules model lang skip github-login awake codex claude init usage doctor version"
   case "$prev" in
     lc|lex-claude) COMPREPLY=( $(compgen -W "$cmds" -- "$cur") ) ;;
-    install)       COMPREPLY=( $(compgen -W "--yes --hops-only" -- "$cur") ) ;;
+    install)       COMPREPLY=( $(compgen -W "--yes --pkg-only" -- "$cur") ) ;;
     awake)         COMPREPLY=( $(compgen -W "off status help --while --lid" -- "$cur") ) ;;
     codex)         COMPREPLY=( $(compgen -W "--print --lite --full help" -- "$cur") ) ;;
     init)          COMPREPLY=( $(compgen -W "zsh bash claude" -- "$cur") ) ;;
@@ -1218,15 +1218,15 @@ Available subcommands (run with `lc <cmd>`):
 - `update`                                    pull latest + redeploy
 - `version`                                   print install version
 
-Sibling binary `hopsdev` (deployed alongside `lc`, points the local `hops`
-CLI at a hopsworks-api branch):
+Sibling binary `pkgdev` (deployed alongside `lc`, points a Python package
+in the active env at a git branch):
 
-- `hopsdev <branch>`                           clone MagicLex/hopsworks-api@branch, editable install, relink skills
-- `hopsdev <owner/repo>@<branch>`              same, from a different fork (or a full git URL)
-- `hopsdev --quick <spec>`                     skip clone + skills: uv pip install --force-reinstall git+...@branch
-- `hopsdev --status`                           show where `hops` resolves now
-- `hopsdev init [dir]`                         clone logicalclocks/workspaces into [dir] (default ./workspaces)
-- `lc install --hops-only`                     install just `hopsdev` (no identity/rules/skills/hook)
+- `pkgdev <pkg>@<branch>`                      clone the branch, editable install (short names: xtrack, xpart, xobjects, xfields, xdeps, xwakes, xcoll, cheetah)
+- `pkgdev <owner/repo>@<branch>`               same, from any GitHub repo (or a full git URL)
+- `pkgdev --quick <spec>`                      skip clone: uv pip install --force-reinstall git+...@branch
+- `pkgdev --release <pkg>`                     back to the PyPI release
+- `pkgdev --status <pkg>`                      installed version and source
+- `lc install --pkg-only`                      install just `pkgdev` (no identity/rules/skills/hook)
 
 Notes:
 - Plain `lc awake` does not survive closing the lid: caffeinate assertions do
@@ -1326,10 +1326,10 @@ cmd_doctor() {
   grep -q "statusline-command.sh" "$SETTINGS" 2>/dev/null && echo "ok    statusline wired" || echo "warn  statusline not wired in $SETTINGS"
   [ -L "$BIN_LINK" ] && echo "ok    cli ($BIN_LINK)" || { echo "fail  cli not symlinked"; ok=0; }
   [ -L "$BIN_ALIAS" ] && echo "ok    alias lc → lex-claude" || { echo "fail  alias 'lc' not symlinked"; ok=0; }
-  if [ -L "$BIN_HOPS" ] && [ -e "$BIN_HOPS" ]; then
-    echo "ok    hopsdev ($BIN_HOPS)"
+  if [ -L "$BIN_PKG" ] && [ -e "$BIN_PKG" ]; then
+    echo "ok    pkgdev ($BIN_PKG)"
   else
-    echo "warn  hopsdev not symlinked (run 'lc update' or 'lc install --hops-only')"
+    echo "warn  pkgdev not symlinked (run 'lc update' or 'lc install --pkg-only')"
   fi
   ensure_path_in_rc || ok=0
   _hook_wired "lex-claude/usage" && echo "ok    usage hook wired" || echo "warn  usage hook not wired (skill tracking off). run 'lc update'"

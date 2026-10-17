@@ -1,14 +1,16 @@
 # lex-claude
 
+Fork of [MagicLex/lex-claude](https://github.com/MagicLex/lex-claude) with a co-scientist layer: research rules in `RULES.md` ("Co-scientist", "Research tools"), the `lc-co-scientist` skill, and vendored science skills (see `THIRD_PARTY.md`).
+
 LEXClaude Code config: identities (with canonical shared rules), `SessionStart` hook, personal skills, and a `lc` CLI to deploy / maintain / sync everything.
 
 > ## ⚠️ Heads up: this is **my** personal config
 >
 > `lc install` is **destructive** to your existing Claude Code setup. If you run it as-is:
 >
-> - **`~/.claude/CLAUDE.md`**: if you have one, it gets backed up to `CLAUDE.md.bak.<ts>` and **replaced** by a symlink to the first identity found in `identities/` (alphabetical order). Your global instructions stop being loaded until you restore them.
+> - **`~/.claude/CLAUDE.md`**: if you have one, it gets backed up to `CLAUDE.md.bak.<ts>` and **replaced** by a symlink to the first identity found in `identities/` (alphabetical order: `betatron` in this fork). Your global instructions stop being loaded until you restore them.
 > - **`~/.claude/settings.json`**: backed up to `settings.json.bak.<ts>`, then any prior `lex-claude` `SessionStart` hook (and legacy `JeanJean` hooks from earlier versions) is stripped and replaced. Other hooks are preserved, but you're trusting `jq` + my filter logic.
-> - **`~/.claude/skills/lc*`**: any skill you happen to have named `lc`, `lc-invariants`, `lc-exploration`, `lc-review-project`, `lc-docs-init`, or `lc-docs-cleanup` will be silently overwritten by symlinks into the install dir.
+> - **`~/.claude/skills/`**: every folder in `skills/` is symlinked there. An existing skill with the same name is left untouched and reported (`warn: ... left untouched`).
 > - **`~/.codex/skills/lc*`**: a Codex skill with one of those names is left untouched and reported as a conflict. Rename or remove it, then run `lc update` to deploy the lex-claude skill.
 > - **`~/.local/bin/lex-claude` and `~/.local/bin/lc`**: created/replaced as symlinks. If you already have a binary called `lc`, it gets shadowed.
 >
@@ -17,7 +19,7 @@ LEXClaude Code config: identities (with canonical shared rules), `SessionStart` 
 ## Bootstrap (new machine or new user)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/MagicLex/lex-claude/main/bin/lex-claude | bash -s install
+curl -fsSL https://raw.githubusercontent.com/aghribi/lex-claude/main/bin/lex-claude | bash -s install
 ```
 
 Clones the repo into `~/.claude/lex-claude`, syncs the rules into every identity, symlinks `~/.claude/CLAUDE.md` to the active identity, deploys the skills, wires the hook into `settings.json`, and installs the CLI on `PATH` (`~/.local/bin/lex-claude` + alias `lc`).
@@ -67,7 +69,7 @@ lc codex --print --lite
 
 ```
 lc install [--yes]                                 # bootstrap (idempotent). Prompts before overwriting existing files.
-lc install --hops-only                             # install only the hopsdev binary + PATH (no identity/rules/skills/hook)
+lc install --pkg-only                              # install only the pkgdev binary + PATH (no identity/rules/skills/hook)
 lc update                                          # git pull + sync rules + redeploy
 lc version                                         # print install version (v<commit-count> + date)
 lc identity                                        # list, active marked *
@@ -84,21 +86,19 @@ lc doctor                                          # check symlinks, hook, skill
 lc -help | -h | --help | help                      # all variants
 ```
 
-### hopsdev
+### pkgdev
 
-Sibling binary deployed alongside `lc` (full install, or `lc install --hops-only`). Points the local `hops` CLI at a hopsworks-api branch so you stop hand-running clone + `uv pip install` + skill relink on every box.
+Sibling binary deployed alongside `lc` (full install, or `lc install --pkg-only`). Points a Python package in the active env at a git branch, to test a fix or a feature branch of Xsuite, Cheetah or any other package without hand-running clone + `uv pip install`.
 
 ```
-hopsdev <branch>                 # clone MagicLex/hopsworks-api@branch, uv pip install -e, relink skills, verify
-hopsdev <owner/repo>@<branch>    # same, from a different fork (or a full https/ssh git URL)
-hopsdev --quick <spec>           # skip clone + skills: uv pip install --force-reinstall git+...@branch
-hopsdev --status                 # show where 'hops' resolves now
-hopsdev init [dir]               # clone logicalclocks/workspaces into [dir] (default ./workspaces), print next steps
+pkgdev <pkg>@<branch>            # clone the branch into $PKGDEV_HOME, uv pip install -e, show status
+pkgdev <owner/repo>@<branch>     # any GitHub repo (or a full https/ssh git URL)
+pkgdev --quick <spec>            # no clone: uv pip install --force-reinstall git+...@branch
+pkgdev --release <pkg>           # back to the PyPI release
+pkgdev --status <pkg>            # installed version, location, editable source
 ```
 
-Run inside the venv where `hops` lives (uv targets the active env). Skill relink only touches symlinks pointing into the hopsdev clone base (`$TMPDIR/hopsdev`, override with `HOPSDEV_HOME`); `lc` skills and `my-skills` are left alone. Default repo is `MagicLex/hopsworks-api` (override with `HOPSDEV_REPO`).
-
-**Auto-update**: `lc` checks `origin/main` 1× / 24h, but only on unknown commands. The known local subcommands (`install` `update` `identity` `rules` `lang` `skip` `version` `github-login` `awake` `codex` `init` `doctor` `usage` `help`) skip the network check. If newer → pull + sync + redeploy + re-exec. Network failure → silent.
+Short names: `xtrack`, `xpart`, `xobjects`, `xfields`, `xdeps`, `xwakes`, `xcoll` (github.com/xsuite), `cheetah` (github.com/desy-ml/cheetah, PyPI `cheetah-accelerator`). Run inside the env to modify (uv targets the activated venv or `./.venv`). Clone base: `$TMPDIR/pkgdev`, override with `PKGDEV_HOME`.
 
 ### agent-browser-bg
 
@@ -136,7 +136,7 @@ Heartbeat: hook.sh writes `~/.claude/lex-claude/.last-hook` (epoch seconds) on e
 
 `usage.sh` records what actually gets used so dead surface gets cut with data, not a guess. Three feeds, one append-only log at `~/.claude/lex-claude/usage.log` (`epoch<TAB>source<TAB>name`):
 
-- **CLI**: the `lc` and `hopsdev` dispatchers log the top-level command (best-effort, never blocks the command).
+- **CLI**: the `lc` and `pkgdev` dispatchers log the top-level command (best-effort, never blocks the command).
 - **Skills**: a `PreToolUse` hook matching the `Skill` tool logs each skill Claude invokes.
 
 `lc usage` tallies the log and lists, per source, what's used and what's **never used** (the debloat candidates). Off via `LEX_CLAUDE_NO_USAGE=1`. The log is local only, never synced.
@@ -235,7 +235,12 @@ All custom skills are prefixed `lc-` to avoid drowning in native skills or other
 - `lc-docs-cleanup`: audit the project's docs for staleness, archives, dead refs, and duplicates. Reports a punch list, never edits.
 - `lc-succession`: hand this session's work to a fresh, verified successor near the context limit. Persists narrow memory, composes a live briefing, then drives `succeed.sh run` to spawn a successor, have the master verify identity + project understanding, reroll on failure, and stand down once one passes. Triggered automatically by the `Stop` hook past the token threshold; also invokable by hand.
 - `lc-close`: close a work slice by hand (no successor spawned). Commit/push check, docs-in-step check, and a narrow, repo-specific project-memory update. Use on "on ferme", "wrap up", "c'est bon pour aujourd'hui".
-- `lc-voice`: write as Lex, in his voice. One DNA (rhythm, concrete over adjectives, self-deprecation, spaced-hyphen asides), four registers with a contextual sarcasm dial (personal blog: full; professional blog: wit, no snark; outreach: one light touch max; forms: zero). Includes the anti-LLM pass from his stylometric classifier. Ground truth is the voice corpus on his machine, not vendored here.
+- `lc-co-scientist`: run a co-scientist loop on a research goal (generate, critique, pairwise-debate ranking, evolve, meta-review) with subagents. Delivers an evidence matrix, ranked hypotheses and discriminating experiments for the user to review.
+- `ag-voice`: write in the user's voice. One DNA (physics does the arguing, causal chains, candid on setbacks, parentheses for precision), four registers: paper, EU proposal, French institutional, email. Calibrated on the user's corpus (`Voice.md`), which stays on their machine.
+
+### Vendored science skills
+
+27 skills from K-Dense-AI/scientific-agent-skills, flonat/flonat-research and obra/superpowers: scientific reasoning (critical thinking, hypotheses, brainstorming, experimental design, statistics, units), literature and writing (literature review, citations, paper lookup, writing, peer review, visualization, review response, proofread), ML/RL/optimization (stable-baselines3, pufferlib, pymoo, pytorch-lightning, scikit-learn, shap, pymc), engineering (systematic debugging, verification before completion). They keep their upstream names (no `lc-` prefix). Pinned commits, patches and licenses: `THIRD_PARTY.md`. Update with `./vendor.sh`, never by editing in place.
 
 ## Repo structure
 
@@ -244,7 +249,7 @@ lex-claude/
 ├── .claude-plugin/
 │   └── plugin.json              ← Claude Code plugin manifest
 ├── bin/lex-claude               ← CLI
-├── bin/hopsdev                  ← hopsworks-api branch switcher (deployed alongside lc)
+├── bin/pkgdev                   ← Python package branch switcher (deployed alongside lc)
 ├── hook.sh                      ← SessionStart hook
 ├── etat.sh                      ← SessionStart état: active identity + live git + memory recall
 ├── master.sh                    ← drift authority: judges identity/rules/project load
@@ -256,10 +261,15 @@ lex-claude/
 ├── usage.sh                     ← usage logger + `lc usage` report (debloat aid)
 ├── statusline-command.sh        ← managed statusline
 ├── RULES.md                     ← canonical shared rules
+├── THIRD_PARTY.md               ← vendored skill sources, commits, patches
+├── vendor.sh                    ← re-vendor third-party skills at pinned commits
+├── licenses/                    ← upstream license texts
 ├── DIGEST.md                    ← condensed rules digest (kept in step with RULES.md by hand)
 ├── identities/
-│   ├── jeanjean.md              ← persona + synced rules block
-│   └── joss.md                  ← persona + synced rules block
+│   ├── betatron.md              ← default: accelerator physics + RL co-scientist
+│   ├── gantt.md                 ← EU project manager and proposal writer
+│   ├── lattice.md               ← research software engineer (pipelines, HPC, CI)
+│   └── nolen.md                 ← grug-style simplicity checker
 ├── skills/
 │   ├── lc/SKILL.md
 │   ├── lc-invariants/SKILL.md

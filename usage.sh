@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # usage.sh — record which lex-claude capabilities actually get used, so dead
 # commands and skills can be cut with data instead of a guess. Three modes:
-#   log <source> <name>   append one event (called by the lc + hopsdev dispatchers)
+#   log <source> <name>   append one event (called by the lc + pkgdev dispatchers)
 #   hook                  PreToolUse stdin → log the Skill that fired
 #   report                tally the log, flag the never-used surface
 # Log is append-only at ~/.claude/lex-claude/usage.log (override LEX_CLAUDE_USAGE_LOG).
@@ -14,7 +14,7 @@ INSTALL_DIR="$HOME/.claude/lex-claude"
 
 # Canonical surface. Kept in step with the dispatchers and the skills dir.
 CLI_CMDS="install update identity rules model lang skip github-login awake codex doctor version usage"
-HOPS_CMDS="run quick status init help"
+PKG_CMDS="run quick status release"
 
 disabled() { [ "${LEX_CLAUDE_DISABLE:-}" = "1" ] || [ "${LEX_CLAUDE_NO_USAGE:-}" = "1" ]; }
 
@@ -76,7 +76,7 @@ report_section() {
 mode_report() {
   if [ ! -s "$LOG" ]; then
     echo "usage: no events logged yet ($LOG)"
-    echo "events accrue as you run lc/hopsdev commands and invoke skills."
+    echo "events accrue as you run lc/pkgdev commands and invoke skills."
     return 0
   fi
   local total first
@@ -84,7 +84,7 @@ mode_report() {
   first=$(head -1 "$LOG" | cut -f1)
   echo "usage since $(human_date "$first") ($total events) — $LOG"
   report_section cli     "cli commands" "$CLI_CMDS"
-  report_section hopsdev "hopsdev"      "$HOPS_CMDS"
+  report_section pkgdev "pkgdev"        "$PKG_CMDS"
   report_section skill   "skills"       "$(known_skills)"
 }
 
