@@ -16,6 +16,10 @@ LEXClaude Code config: identities (with canonical shared rules), `SessionStart` 
 >
 > This repo is published openly because the structure is reusable, **not** because you should run `ag install` blindly. If you want the same setup with your own persona and rules: fork it, replace the file(s) in `identities/` and edit `RULES.md` to match your conventions, then install from your fork (`LEX_CLAUDE_REPO=https://github.com/<you>/lex-claude.git ag install`).
 
+## Credits
+
+Built on Lex's work ([MagicLex/lex-claude](https://github.com/MagicLex/lex-claude)): the CLI, identity architecture and synced rules, hooks (SessionStart, digest, style, usage), master judge, cold start, succession, project memory, the original `lc-*` skills (renamed `ag-*` here), the `lc-voice` anti-LLM checklist behind `ag-voice`, `hopsdev` behind `pkgdev`, and the personas Grug, JeanJean and Joss behind Nolen, Lattice and Gantt. Vendored science skills and their licenses: `THIRD_PARTY.md`.
+
 ## Bootstrap (new machine or new user)
 
 ```bash
