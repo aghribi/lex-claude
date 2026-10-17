@@ -245,6 +245,7 @@ All custom skills are prefixed `ag-` to avoid drowning in native skills or other
 - `ag-fair-data`: formats (Parquet, HDF5, openPMD, NeXus, Zarr, NetCDF), loaders, time series, ML pipelines, metadata, releases.
 - `ag-workspace`: PARA work_space organisation, templates for every item type, `scripts/new_item.sh` scaffolding, naming, lifecycle, hard exclusions for credential stores.
 - `ag-rag`: local hybrid search (FTS5 + bge-m3 via Ollama, sqlite-vec) over work documents, with a read-only MCP server. Code in `tools/ag-rag/ag_rag.py`.
+- `ag-train`: hands-on quests in a sandbox (`scripts/sandbox.sh`, `scripts/check.sh`), paired with the Betatron Training Line web game.
 - `ag-voice`: write in the user's voice. One DNA (physics does the arguing, causal chains, candid on setbacks, parentheses for precision), four registers: paper, EU proposal, French institutional, email. Calibrated on the user's corpus (`Voice.md`), which stays on their machine.
 
 ### Vendored science skills
