@@ -18,6 +18,7 @@ embeddings through the local Ollama server. Nothing leaves the machine.
 """
 
 import argparse
+import fcntl
 import json
 import os
 import re
@@ -423,6 +424,16 @@ def main():
         CONFIG.write_text(DEFAULT_CONFIG)
         print(f"wrote {CONFIG}")
     else:
+        if a.cmd in ("index", "embed", "update"):
+            # One writer at a time: a nightly run must not start on top of a long backfill.
+            cfg = load_config()
+            cfg["db"].parent.mkdir(parents=True, exist_ok=True)
+            lock = open(cfg["db"].parent / "index.lock", "w")
+            try:
+                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                print("another index run holds the lock; nothing to do")
+                return
         {"index": cmd_index, "embed": cmd_embed, "update": lambda x: (cmd_index(x), cmd_embed(x)),
          "search": cmd_search, "stats": cmd_stats, "serve": cmd_serve}[a.cmd](a)
 

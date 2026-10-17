@@ -32,6 +32,7 @@ uv run $R index --prune             # also drop documents deleted from disk
 uv run $R embed --minutes 60       # add missing vectors, resumable (about 5 chunks/s on an M3)
 uv run $R stats                     # includes the share of chunks that have vectors
 ```
+One index run at a time (lock file next to the index). Nightly: `tools/ag-rag/nightly.sh` (launchd, 02:00) runs `update --prune` with a 4-hour embedding budget and logs to `~/.local/share/ag-rag/nightly.log`.
 Vectors are filled scope by scope (my_outputs, projects, libraries), most recent documents first. Until a chunk has its vector it is found by keywords only.
 Unchanged files (same mtime and size) are skipped. Files with almost no extractable text are recorded as `empty` (usually scanned PDFs; OCR is not enabled yet).
 
