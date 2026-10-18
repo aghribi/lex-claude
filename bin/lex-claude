@@ -19,6 +19,7 @@ LANG_FILE="$INSTALL_DIR/.lang"
 MODEL_FILE="$INSTALL_DIR/.model"
 SKIP_FILE="$INSTALL_DIR/.skip"
 BRAND_FILE="$INSTALL_DIR/.brand"
+COLDSTART_DIR="$INSTALL_DIR/state/coldstart"
 LID_RULE="/etc/sudoers.d/lex-claude-pmset"
 # ${BASH_SOURCE[0]:-$0}: BASH_SOURCE is unset when piped (curl | bash -s) and set -u would abort.
 SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." && pwd)"
@@ -89,7 +90,7 @@ Usage:
   lex-claude awake off|status                        Stop or inspect the assertion.
   lex-claude codex [prompt]                          Launch Codex with active identity + project docs injected as the initial prompt.
   lex-claude codex --print [prompt]                  Print the prompt that would be sent to Codex.
-  lex-claude claude [args...]                        Launch Claude Code with a verified cold-start: pre-flight a fresh session against the master before handing over the seat (bounded reroll + self-heal). Alias 'claude' to it to make it your default. Skip: LEX_CLAUDE_COLDSTART_DISABLE=1.
+  lex-claude claude [--fast|--verify] [args...]      Launch Claude Code with a verified cold-start: pre-flight a fresh session against the master before handing over the seat (bounded reroll + self-heal). A pass is cached per setup fingerprint for LEX_CLAUDE_COLDSTART_TTL_HOURS (default 24). --verify forces the check, --fast skips it. Alias 'claude' to it to make it your default. Skip: LEX_CLAUDE_COLDSTART_DISABLE=1.
   lex-claude init zsh|bash                           Output shell completion. Add to rc: eval "\$(ag init zsh)".
   lex-claude init claude                             Print the context the SessionStart hook loads into Claude Code.
   lex-claude usage                                   Report which commands/skills get used (and which never do). Debloat aid.
@@ -1266,6 +1267,7 @@ Available subcommands (run with `ag <cmd>`):
 - `skip on|off|status`                        toggle shell wrapper for Claude and Codex permission bypass
 - `brand on|off|status`                       own logo, identity name and terminal title on the Claude Code banner (brand.py PTY proxy)
 - `betatron [args]`                           branded `ag claude`, whatever `ag brand` says (sibling launcher in ~/.local/bin)
+- `claude [--fast|--verify] [args]`           cold-start check, cached per setup fingerprint; --verify forces it, --fast skips it
 - `awake [30m|2h|1h30m|45s|N]`                keep Mac awake (caffeinate -dimsu)
 - `awake --while <pid>`                       stay awake while pid is alive
 - `awake --lid [duration|--while <pid>]`      also stay awake lid-closed (pmset disablesleep, reverted on stop)
@@ -1309,7 +1311,10 @@ Notes:
 - Session flow: identity/rules loading is verified live by a "master" judge
   (master.sh), a neutral session spawned on demand. Cold start goes through 'ag claude', which pre-flights a fresh session
   against the master before handing over the seat (bounded reroll + self-heal on
-  failure). Near the token limit (LEX_CLAUDE_HANDOFF_TOKENS, default 600000) a
+  failure). A pass is cached per fingerprint of the loaded inputs (identity,
+  project CLAUDE.md chain, hooks, lex-claude and claude versions, flags) for
+  LEX_CLAUDE_COLDSTART_TTL_HOURS (default 24, 0 = always check); outcomes are
+  logged in state/coldstart/log. Near the token limit (LEX_CLAUDE_HANDOFF_TOKENS, default 600000) a
   Stop hook (succeed.sh check) triggers the ag-succession skill: it spawns a
   fresh successor, the master verifies identity + project understanding, rerolls
   a fresh one on any failure, opens the verified one in a new terminal window
@@ -1437,6 +1442,35 @@ _coldstart_heal() {
   return 0
 }
 
+# Hash of what decides the loaded context: identity, project CLAUDE.md chain,
+# hook wiring, deployed lex-claude, claude binary, lang, launch flags. Hook output
+# that varies per launch (état, memory) is not covered.
+_coldstart_fingerprint() {
+  local bin="$1" d="$PWD" f; shift
+  {
+    cat "$CLAUDE_DIR/CLAUDE.md"
+    while :; do
+      for f in "$d/CLAUDE.md" "$d/CLAUDE.local.md" "$d/.claude/CLAUDE.md"; do
+        [ -f "$f" ] && { echo "== $f"; cat "$f"; }
+      done
+      [ "$d" = / ] && break
+      d=$(dirname "$d")
+    done
+    jq -c '.hooks // {}' "$SETTINGS" 2>/dev/null
+    git -C "$INSTALL_DIR" rev-parse HEAD 2>/dev/null
+    ls -lLn "$bin" | awk '{print $5,$6,$7,$8}'
+    cat "$LANG_FILE" 2>/dev/null
+    printf '%s\n' "$@"
+  } | { shasum -a 256 2>/dev/null || sha256sum; } | cut -c1-16
+}
+
+# One TSV line per cold start: time, outcome (hit|fast|pass|fail|unverified),
+# fingerprint, cwd, reason. Makes hit and failure rates measurable.
+_coldstart_log() {
+  mkdir -p "$COLDSTART_DIR" 2>/dev/null || return 0
+  printf '%s\t%s\t%s\t%s\t%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$1" "${2:-}" "$PWD" "${3:-}" >> "$COLDSTART_DIR/log" 2>/dev/null || true
+}
+
 # ag claude — cold-start supervisor. A hook cannot restart its own session, so
 # the launcher owns the gate, and it verifies the REAL session, not a proxy: it
 # runs the identity/rules self-report as turn 1 of a fresh persisted session, has
@@ -1444,6 +1478,9 @@ _coldstart_heal() {
 # hands over the session that PASSED via --resume (your work continues as turn
 # 2+). Cheap symlink floor + self-heal first; never leaves the user without a
 # shell. Preserves the model/skip flags.
+# A PASS is cached per fingerprint of the loaded inputs: an unchanged setup opens
+# straight away until LEX_CLAUDE_COLDSTART_TTL_HOURS (default 24, 0 = always
+# check) runs out. --verify forces the check, --fast skips it (unverified).
 # Opt out: LEX_CLAUDE_COLDSTART_DISABLE=1 (or LEX_CLAUDE_DISABLE=1).
 cmd_claude() {
   # Resolve the real binary once. `exec command claude` only works where a
@@ -1453,6 +1490,17 @@ cmd_claude() {
   local _f=()
   [ -f "$MODEL_FILE" ] && _f+=(--model "$(cat "$MODEL_FILE")")
   [ -f "$SKIP_FILE" ] && _f+=(--dangerously-skip-permissions)
+
+  # --fast/--verify belong to ag, never to claude.
+  local mode=auto a _args=()
+  for a in "$@"; do
+    case "$a" in
+      --fast) mode=fast ;;
+      --verify) mode=verify ;;
+      *) _args+=("$a") ;;
+    esac
+  done
+  set -- ${_args[@]+"${_args[@]}"}
 
   # Interactive hand-over. With `ag brand on` the seat runs behind brand.py;
   # it falls back to the bare binary when brand.py or uv is missing.
@@ -1487,19 +1535,34 @@ cmd_claude() {
     _claude_exec ${_f[@]+"${_f[@]}"} "$@"
   fi
 
+  local link="$CLAUDE_DIR/CLAUDE.md" fp
+  local ttl="${LEX_CLAUDE_COLDSTART_TTL_HOURS:-24}"; case "$ttl" in *[!0-9]*|"") ttl=24 ;; esac
+  if [ "$mode" = fast ]; then
+    [ -e "$link" ] || _coldstart_heal "$link"
+    _coldstart_log fast
+    _claude_exec ${_f[@]+"${_f[@]}"} "$@"
+  fi
+  if [ "$mode" = auto ] && [ "$ttl" -gt 0 ] && [ -L "$link" ] && [ -e "$link" ]; then
+    fp=$(_coldstart_fingerprint "$claude_bin" ${_f[@]+"${_f[@]}"}) || fp=""
+    if [ -n "$fp" ] && [ -n "$(find "$COLDSTART_DIR/pass/$fp" -mmin -$((ttl * 60)) 2>/dev/null)" ]; then
+      _coldstart_log hit "$fp"
+      _claude_exec ${_f[@]+"${_f[@]}"} "$@"
+    fi
+  fi
+
   # No auth → every -p turn returns an error blob, subject and judge alike.
   # Rerolling cannot fix that; hand the seat over so claude runs its login flow.
   if [ "$("$claude_bin" auth status 2>/dev/null | jq -r '.loggedIn | tostring' 2>/dev/null)" = "false" ]; then
     echo "ag: claude is not logged in. Skipping the cold-start check. Log in, then relaunch." >&2
+    _coldstart_log unverified "" "not logged in"
     _claude_exec ${_f[@]+"${_f[@]}"} "$@"
   fi
 
   local max="${LEX_CLAUDE_SUCCESSION_MAX:-3}"; case "$max" in *[!0-9]*|"") max=3 ;; esac
-  local link="$CLAUDE_DIR/CLAUDE.md"
   local pdir="$HOME/.claude/projects/$(printf '%s' "$PWD" | sed 's#[^A-Za-z0-9]#-#g')"
   # Private 0700 dir for the preflight files; no predictable /tmp fallback.
   local tmpd; tmpd=$(mktemp -d 2>/dev/null) \
-    || { echo "ag: cannot create a temp dir; launching unverified." >&2; _claude_exec ${_f[@]+"${_f[@]}"} "$@"; }
+    || { echo "ag: cannot create a temp dir; launching unverified." >&2; _coldstart_log unverified "" "no temp dir"; _claude_exec ${_f[@]+"${_f[@]}"} "$@"; }
   local tmp="$tmpd/answer"
   local prompt="In 6 lines max: state your identity (name) and your core non-negotiable rules, in your own words."
 
@@ -1514,7 +1577,7 @@ cmd_claude() {
     # Lowercase: claude names the jsonl in lowercase, and the rm below must hit it
     # on a case-sensitive volume too.
     uuid=$({ uuidgen 2>/dev/null || cat /proc/sys/kernel/random/uuid 2>/dev/null; } | tr 'A-F' 'a-f')
-    [ -n "$uuid" ] || { echo "ag: no uuid source; launching raw." >&2; rm -rf "$tmpd"; _claude_exec ${_f[@]+"${_f[@]}"} "$@"; }
+    [ -n "$uuid" ] || { echo "ag: no uuid source; launching raw." >&2; rm -rf "$tmpd"; _coldstart_log unverified "" "no uuid source"; _claude_exec ${_f[@]+"${_f[@]}"} "$@"; }
     # Verify the REAL session: run the identity self-report as turn 1 of the
     # persisted session, judge THAT turn. set -e/pipefail: a failed turn rerolls.
     # Keep the failure reason: a silent 3/3 reroll is undebuggable.
@@ -1524,6 +1587,7 @@ cmd_claude() {
     if [ "$(jq -r '.is_error // false' "$tmp.raw" 2>/dev/null)" = "true" ]; then
       echo "ag: preflight turn errored: $(jq -r '.result // empty' "$tmp.raw" | head -c 200). Launching unverified." >&2
       rm -rf "$tmpd" "$pdir/$uuid.jsonl" 2>/dev/null || true
+      _coldstart_log unverified "" "preflight turn errored"
       _claude_exec ${_f[@]+"${_f[@]}"} "$@"
     fi
     jq -r '.result // empty' "$tmp.raw" > "$tmp" 2>/dev/null || true
@@ -1532,6 +1596,12 @@ cmd_claude() {
       reason="preflight turn produced no answer: $(tail -n1 "$tmp.err" 2>/dev/null || echo 'no stderr')"
     elif reason=$("$master" verify --answer "$tmp" --phase identity 2>"$tmp.merr"); then
       rm -rf "$tmpd"
+      fp=$(_coldstart_fingerprint "$claude_bin" ${_f[@]+"${_f[@]}"}) || fp=""
+      if [ -n "$fp" ] && mkdir -p "$COLDSTART_DIR/pass" 2>/dev/null; then
+        touch "$COLDSTART_DIR/pass/$fp" 2>/dev/null || true
+        [ "$ttl" -gt 0 ] && find "$COLDSTART_DIR/pass" -type f -mmin +$((ttl * 60)) -delete 2>/dev/null
+      fi
+      _coldstart_log pass "$fp"
       # Hand over the verified session itself; your work continues as turn 2+.
       _claude_exec ${_f[@]+"${_f[@]}"} --resume "$uuid" "$@"
     else
@@ -1540,12 +1610,14 @@ cmd_claude() {
       [ "$reason" = "master: " ] && reason="master error: $(tail -n1 "$tmp.merr" 2>/dev/null | cut -c1-200)"
     fi
     echo "ag: cold-start check failed (attempt $attempt/$max): $reason. Rerolling a fresh session." >&2
+    _coldstart_log fail "" "$(printf '%s' "$reason" | tr '\t\n' '  ' | cut -c1-200)"
     rm -f "$pdir/$uuid.jsonl" 2>/dev/null || true    # discard the rejected session
     _coldstart_heal "$link"
     attempt=$((attempt+1))
   done
   rm -rf "$tmpd"
   echo "ag: WARNING: cold-start verification failed $max times. Identity load looks structurally broken; run 'ag doctor'. Launching anyway (unverified)." >&2
+  _coldstart_log unverified "" "failed $max times"
   _claude_exec ${_f[@]+"${_f[@]}"} "$@"
 }
 
