@@ -22,7 +22,11 @@ SELF_DIR="$(cd "$(dirname "$0")" && pwd)"
 DIGEST="$SELF_DIR/DIGEST.md"
 [ -f "$DIGEST" ] || exit 0
 
-session=$(jq -r '.session_id // empty' 2>/dev/null)
+input=$(cat)
+# Prompts direct.sh runs never reach the model: they do not count.
+printf '%s' "$input" | jq -r '.prompt // empty' 2>/dev/null | bash "$SELF_DIR/direct.sh" owns && exit 0
+
+session=$(printf '%s' "$input" | jq -r '.session_id // empty' 2>/dev/null)
 session=${session//[^A-Za-z0-9._-]/}
 [ -n "$session" ] || exit 0
 

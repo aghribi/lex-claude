@@ -34,12 +34,9 @@ for f in $project_files; do
   fi
 done
 
-LEX_CLAUDE_CLI="$SELF_DIR/bin/lex-claude"
-[ -x "$LEX_CLAUDE_CLI" ] || LEX_CLAUDE_CLI="$HOME/.claude/lex-claude/bin/lex-claude"
-if [ -x "$LEX_CLAUDE_CLI" ]; then
-  printf '\n===== lex-claude commands (ag) =====\n'
-  "$LEX_CLAUDE_CLI" init claude
-fi
+# A pointer, not the reference itself: the full list costs ~1.4k tokens every
+# session and is rarely needed.
+printf '\n===== lex-claude commands (ag) =====\n`ag` (alias of `lex-claude`) manages identities, rules, hooks, skills, model, lang and the ag-rag index. Run `ag init claude` for the command reference before using it. A prompt that is exactly `ag <args>` or `/ag <args>` runs in a hook and never reaches you.\n'
 
 LEX_CLAUDE_LANG_FILE="$HOME/.claude/lex-claude/.lang"
 if [ -f "$LEX_CLAUDE_LANG_FILE" ]; then

@@ -1,18 +1,14 @@
 ---
 name: ag
-description: Surface current lex-claude state. Active identity, installed skills, install health (doctor), CLI surface, version. Use when the user types /ag, asks what's loaded globally, asks which lex-claude version is running, or wants a sanity check that the install is healthy.
+description: Surface current lex-claude state. Active identity, install health (doctor), version, CLI surface.
+disable-model-invocation: true
 ---
 
-Run these and report concisely:
+Report this state in a few lines: active identity, version, every `fail` or `warn` line from doctor. Nothing else.
 
-- `ag identity` — list identities, mark active.
-- `ag doctor` — install health (CLAUDE.md, AGENTS.md, hooks, skills, CLI on PATH).
-- `ls -1 ~/.claude/skills/` and `ls -1 ~/.codex/skills/` — globally installed skills.
-
-Then echo the CLI surface in one line:
-
-```
-ag install | update | identity [<name>] | identity new --name <n> --desc "<d>" [--empty] | rules sync | doctor
+```!
+ag identity
+ag doctor
 ```
 
-If `ag` is missing from PATH, suggest: `~/.claude/lex-claude/bin/lex-claude install`.
+With the direct hook wired, `/ag` never reaches this skill: the hook runs `ag doctor` without a model turn. This skill serves when the hook is off (`LEX_CLAUDE_DIRECT_DISABLE=1`). Full command list: `ag init claude`.

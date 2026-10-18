@@ -12,7 +12,7 @@ Prefer the MCP tools when the `ag-rag` server is connected:
 - `read_document(path, page=None)`: full indexed text of a hit, or one page. Only indexed documents are readable.
 - `index_stats()`: counts and freshness.
 
-Without MCP: `uv run ~/.claude/lex-claude/tools/ag-rag/ag_rag.py search "query" -k 8 --scope projects`.
+Without MCP: `ag rag search "query" -k 8 --scope projects`.
 
 Good practice:
 - Query in the document's language, or run the query in both French and English: bge-m3 is multilingual, but keyword matching is not.
@@ -24,14 +24,14 @@ Good practice:
 ## Maintaining the index
 
 ```bash
-R=~/.claude/lex-claude/tools/ag-rag/ag_rag.py
-uv run $R update                    # index (fast) then embed (slow); both incremental
-uv run $R index                     # extract + keyword index only: only new or changed files
-uv run $R index --scope my_outputs  # one scope
-uv run $R index --prune             # also drop documents deleted from disk
-uv run $R embed --minutes 60       # add missing vectors, resumable (about 5 chunks/s on an M3)
-uv run $R stats                     # includes the share of chunks that have vectors
+ag rag update                    # index (fast) then embed (slow); both incremental
+ag rag index                     # extract + keyword index only: only new or changed files
+ag rag index --scope my_outputs  # one scope
+ag rag index --prune             # also drop documents deleted from disk
+ag rag embed --minutes 60        # add missing vectors, resumable (about 5 chunks/s on an M3)
+ag rag stats                     # includes the share of chunks that have vectors
 ```
+The user can send any of these as a prompt: the direct hook runs it without a model turn (long runs go to the background).
 One index run at a time (lock file next to the index). Nightly: `tools/ag-rag/nightly.sh` (launchd, 02:00) runs `update --prune` with a 4-hour embedding budget and logs to `~/.local/share/ag-rag/nightly.log`.
 Vectors are filled scope by scope (my_outputs, projects, libraries), most recent documents first. Until a chunk has its vector it is found by keywords only.
 Unchanged files (same mtime and size) are skipped. Files with almost no extractable text are recorded as `empty` (usually scanned PDFs; OCR is not enabled yet).

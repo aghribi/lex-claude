@@ -13,7 +13,7 @@ LOG="${LEX_CLAUDE_USAGE_LOG:-$HOME/.claude/lex-claude/usage.log}"
 INSTALL_DIR="$HOME/.claude/lex-claude"
 
 # Canonical surface. Kept in step with the dispatchers and the skills dir.
-CLI_CMDS="install update identity rules model lang skip github-login awake codex doctor version usage"
+CLI_CMDS="install update identity rules model lang skip brand github-login awake codex claude rag doctor version usage"
 PKG_CMDS="run quick status release"
 
 disabled() { [ "${LEX_CLAUDE_DISABLE:-}" = "1" ] || [ "${LEX_CLAUDE_NO_USAGE:-}" = "1" ]; }

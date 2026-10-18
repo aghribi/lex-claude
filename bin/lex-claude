@@ -93,6 +93,7 @@ Usage:
   lex-claude claude [--fast|--verify] [args...]      Launch Claude Code with a verified cold-start: pre-flight a fresh session against the master before handing over the seat (bounded reroll + self-heal). A pass is cached per setup fingerprint for LEX_CLAUDE_COLDSTART_TTL_HOURS (default 24). --verify forces the check, --fast skips it. Alias 'claude' to it to make it your default. Skip: LEX_CLAUDE_COLDSTART_DISABLE=1.
   lex-claude init zsh|bash                           Output shell completion. Add to rc: eval "\$(ag init zsh)".
   lex-claude init claude                             Print the context the SessionStart hook loads into Claude Code.
+  lex-claude rag <command> [args...]                 Run the ag-rag indexer (search, stats, update, index, embed, init). See 'ag rag --help'.
   lex-claude usage                                   Report which commands/skills get used (and which never do). Debloat aid.
   lex-claude doctor             Sanity-check the install.
   lex-claude version            Print install version (commit count + date).
@@ -146,6 +147,7 @@ wire_hook() {
   local wcmd="bash $INSTALL_DIR/watch.sh"
   local ucmd="bash $INSTALL_DIR/usage.sh hook"
   local dcmd="bash $INSTALL_DIR/digest.sh"
+  local dicmd="bash $INSTALL_DIR/direct.sh"
   local scmd="bash $INSTALL_DIR/style.sh"
   local sucmd="bash $INSTALL_DIR/succeed.sh"
   if ! command -v jq >/dev/null 2>&1; then
@@ -168,7 +170,7 @@ wire_hook() {
   cp "$SETTINGS" "$bak" 2>/dev/null || true
 
   local out; out=$(mktemp 2>/dev/null) || out="/tmp/ag-settings-out.$$"
-  if jq --arg cmd "$cmd" --arg wcmd "$wcmd" --arg ucmd "$ucmd" --arg dcmd "$dcmd" --arg scmd "$scmd" --arg sucmd "$sucmd" '
+  if jq --arg cmd "$cmd" --arg wcmd "$wcmd" --arg ucmd "$ucmd" --arg dcmd "$dcmd" --arg dicmd "$dicmd" --arg scmd "$scmd" --arg sucmd "$sucmd" '
     .hooks //= {} |
     .hooks.SessionStart //= [] |
     .hooks.SessionStart = [
@@ -196,9 +198,12 @@ wire_hook() {
     .hooks.UserPromptSubmit //= [] |
     .hooks.UserPromptSubmit = [
       .hooks.UserPromptSubmit[]
-      | select(all(.hooks[]?; (.command // "") | test("lex-claude/digest") | not))
+      | select(all(.hooks[]?; (.command // "") | (test("lex-claude/digest") or test("lex-claude/direct")) | not))
     ] |
-    .hooks.UserPromptSubmit += [{"hooks":[{"type":"command","command":$dcmd}]}] |
+    .hooks.UserPromptSubmit += [
+      {"hooks":[{"type":"command","command":$dicmd,"timeout":120}]},
+      {"hooks":[{"type":"command","command":$dcmd}]}
+    ] |
     .hooks.PostToolUse //= [] |
     .hooks.PostToolUse = [
       .hooks.PostToolUse[]
@@ -1167,7 +1172,7 @@ cmd_init() {
       cat <<'EOF'
 # lex-claude zsh completion. Add to ~/.zshrc: eval "$(ag init zsh)"
 _ag() {
-  local -a cmds awake_cmds init_cmds identity_cmds rules_cmds codex_cmds install_cmds model_cmds lang_cmds skip_cmds brand_cmds
+  local -a cmds awake_cmds init_cmds identity_cmds rules_cmds codex_cmds install_cmds model_cmds lang_cmds skip_cmds brand_cmds rag_cmds
   cmds=(
     'install:bootstrap clone + symlinks + hooks'
     'update:pull latest and redeploy'
@@ -1182,6 +1187,7 @@ _ag() {
     'codex:launch Codex with lex-claude context preloaded'
     'claude:launch Claude Code with a verified cold-start (master pre-flight)'
     'init:shell completion + context dump'
+    'rag:ag-rag indexer (search, stats, update)'
     'usage:report used / never-used commands + skills'
     'doctor:sanity-check the install'
     'version:print install version'
@@ -1196,6 +1202,7 @@ _ag() {
   lang_cmds=('en:English' 'fr:French' 'off:clear (Claude picks)')
   skip_cmds=('on:enable' 'off:disable' 'status:show current state')
   brand_cmds=('on:enable' 'off:disable' 'status:show current state')
+  rag_cmds=('search:hybrid search' 'stats:counts and freshness' 'update:index then embed' 'index:keyword index only' 'embed:add missing vectors' 'init:write default config')
   local state
   _arguments -C '1: :->cmd' '*::arg:->args'
   case $state in
@@ -1212,6 +1219,7 @@ _ag() {
         lang)     _describe 'lang' lang_cmds ;;
         skip)     _describe 'skip' skip_cmds ;;
         brand)    _describe 'brand' brand_cmds ;;
+        rag)      _describe 'rag' rag_cmds ;;
       esac
       ;;
   esac
@@ -1227,7 +1235,7 @@ _ag() {
   local cur prev cmds
   cur="${COMP_WORDS[COMP_CWORD]}"
   prev="${COMP_WORDS[COMP_CWORD-1]}"
-  cmds="install update identity rules model lang skip brand github-login awake codex claude init usage doctor version"
+  cmds="install update identity rules model lang skip brand github-login awake codex claude init rag usage doctor version"
   case "$prev" in
     ag|lex-claude) COMPREPLY=( $(compgen -W "$cmds" -- "$cur") ) ;;
     install)       COMPREPLY=( $(compgen -W "--yes --pkg-only" -- "$cur") ) ;;
@@ -1240,6 +1248,7 @@ _ag() {
     lang)          COMPREPLY=( $(compgen -W "en fr off" -- "$cur") ) ;;
     skip)          COMPREPLY=( $(compgen -W "on off status" -- "$cur") ) ;;
     brand)         COMPREPLY=( $(compgen -W "on off status" -- "$cur") ) ;;
+    rag)           COMPREPLY=( $(compgen -W "search stats update index embed init" -- "$cur") ) ;;
   esac
 }
 complete -F _ag ag
@@ -1278,6 +1287,9 @@ Available subcommands (run with `ag <cmd>`):
 - `init zsh|bash`                             output shell completion
 - `init claude`                               print this command reference
 - `github-login [--token TOKEN]`              wire gh + git auth (no args = auto-detect: authed/env/device-flow/ssh; idempotent). Also sets git author when unset or pod default
+- `rag search "<query>" [-k 8] [--scope S]`    hybrid search over the user's indexed documents
+- `rag stats`                                 index counts and freshness
+- `rag update|index|embed [--scope S] [--prune] [--minutes M]`  refresh the index (one run at a time)
 - `usage`                                     report which commands + skills get used (never-used = debloat candidates)
 - `doctor`                                    sanity-check the install
 - `update`                                    pull latest + redeploy
@@ -1401,6 +1413,7 @@ cmd_doctor() {
   fi
   ensure_path_in_rc || ok=0
   _hook_wired "lex-claude/usage" && echo "ok    usage hook wired" || echo "warn  usage hook not wired (skill tracking off). run 'ag update'"
+  _hook_wired "lex-claude/direct" && echo "ok    direct hook wired (ag prompts run without the model)" || echo "warn  direct hook not wired (ag prompts go to the model). run 'ag update'"
   _hook_wired "lex-claude/digest" && echo "ok    digest hook wired" || echo "warn  digest hook not wired (rules recall off). run 'ag update'"
   _hook_wired "lex-claude/style" && echo "ok    style hook wired" || echo "warn  style hook not wired (em-dash check off). run 'ag update'"
   _hook_wired "lex-claude/succeed" && echo "ok    succession trigger wired (Stop → succeed.sh check)" || echo "warn  succession trigger not wired (token handoff off). run 'ag update'"
@@ -1428,6 +1441,14 @@ cmd_usage() {
   [ -x "$script" ] || script="$INSTALL_DIR/usage.sh"
   [ -x "$script" ] || die "usage.sh not found (run 'ag update')"
   bash "$script" report
+}
+
+cmd_rag() {
+  local script="$SELF_DIR/tools/ag-rag/ag_rag.py"
+  [ -f "$script" ] || script="$INSTALL_DIR/tools/ag-rag/ag_rag.py"
+  [ -f "$script" ] || die "ag_rag.py not found (run 'ag update')"
+  command -v uv >/dev/null 2>&1 || die "uv not found"
+  exec uv run -q "$script" "$@"
 }
 
 # Best-effort self-heal: re-point the identity symlink to the identity it names
@@ -1629,7 +1650,7 @@ if [ "$(basename "$0")" = "$BRAND_CMD" ]; then
 fi
 
 case "${1:-}" in
-  install|update|__deploy|identity|rules|model|lang|skip|brand|version|github-login|awake|codex|claude|init|doctor|usage|-v|--version|-h|-help|--help|help|"") ;;
+  install|update|__deploy|identity|rules|model|lang|skip|brand|version|github-login|awake|codex|claude|init|rag|doctor|usage|-v|--version|-h|-help|--help|help|"") ;;
   *) auto_update "$@" ;;
 esac
 
@@ -1663,6 +1684,7 @@ case "${1:-}" in
   claude)       shift; cmd_claude "$@" ;;
   init)         shift; cmd_init "$@" ;;
   doctor)       shift; cmd_doctor "$@" ;;
+  rag)          shift; cmd_rag "$@" ;;
   usage)        shift; cmd_usage "$@" ;;
   version|-v|--version) cmd_version ;;
   -h|-help|--help|help|"") usage ;;

@@ -52,13 +52,13 @@ Modes:
 - the active global identity from `~/.claude/CLAUDE.md`
 - the current project's `CLAUDE.md` if present
 - `docs/PHILOSOPHY.md`, `docs/CONTEXT.md`, `docs/PRINCIPLES.md`, `docs/INVARIANTS.md`, `docs/OPS.md`, `docs/TODO.md` if present
-- the `ag` command reference
+- a pointer to the `ag` command reference (`ag init claude`)
 - the active `ag lang` setting
 
 - `ag codex --lite` loads:
 - the active global identity from `~/.claude/CLAUDE.md`
 - the current project's `CLAUDE.md` if present
-- the `ag` command reference
+- a pointer to the `ag` command reference (`ag init claude`)
 - the active `ag lang` setting
 
 Examples:
@@ -88,6 +88,7 @@ betatron [args]                                    # branded `ag claude` whateve
 ag claude [--fast|--verify] [args]                 # cold-start check, cached per setup fingerprint; --verify forces it, --fast skips it
 ag codex [--lite|--full] [prompt]                  # launch Codex with lex-claude context preloaded
 ag codex --print [--lite|--full] [prompt]          # inspect the generated Codex prompt without launching
+ag rag <command> [args]                            # ag-rag indexer: search, stats, update, index, embed, init
 ag usage                                           # report which commands + skills get used; never-used = debloat candidates
 ag doctor                                          # check symlinks, hook, skills, PATH (auto-fixes ~/.zshrc / ~/.bashrc)
 ag -help | -h | --help | help                      # all variants
@@ -148,6 +149,7 @@ Three escape hatches if you want to neutralise a piece without uninstalling.
 - `LEX_CLAUDE_NO_AUTO_UPDATE=1`: disables the daily `git pull` + re-exec on `ag <cmd>`. Use when you want frozen behaviour (CI runs, shared machines, long-running scripts).
 - `LEX_CLAUDE_YES=1`: equivalent to `ag install --yes`; skips the destructive-overwrite prompt. Use only when you've read the warning above and accept it.
 - `LEX_CLAUDE_NO_USAGE=1`: turns off usage logging (`ag usage` keeps reading the existing log but records nothing new). `LEX_CLAUDE_DISABLE=1` also stops it.
+- `LEX_CLAUDE_DIRECT_DISABLE=1`: turns off the direct hook; `ag <args>` prompts go to the model again. `LEX_CLAUDE_DISABLE=1` also stops it.
 - `LEX_CLAUDE_DIGEST_EVERY=0`: turns off the periodic rules digest (any other value sets the cadence in prompts, default 5). `LEX_CLAUDE_DISABLE=1` also stops it, along with the style hook.
 - `LEX_CLAUDE_HANDOFF_DISABLE=1`: turns off the token-triggered succession (the `Stop` hook fires nothing near the limit). `LEX_CLAUDE_DISABLE=1` also stops it.
 - `LEX_CLAUDE_COLDSTART_DISABLE=1`: turns off the `ag claude` pre-flight; the launcher hands over the seat without verifying identity/rules load first. `LEX_CLAUDE_COLDSTART_TTL_HOURS` (default 24): how long a cached pass stays valid (0 = check every launch).
@@ -206,6 +208,10 @@ $CLAUDE_PROJECT_DIR/
 All optional. Only what exists is loaded.
 
 The active identity at `~/.claude/CLAUDE.md` (symlink → `identities/<name>.md`, rules inlined) is loaded natively by Claude Code, so `hook.sh` does not re-inject it. Codex gets the same identity through the `~/.codex/AGENTS.md` symlink and the bundled skills through `~/.codex/skills/` (see Codex bridge above).
+
+## Direct commands
+
+`direct.sh` (`UserPromptSubmit`): a prompt that is exactly `ag <args>` or `/ag <args>` on one line runs the CLI inside the hook (bare `/ag` runs `ag doctor`). The prompt is blocked, so the model is never called and nothing enters the context; the output shows in the transcript. Commands that need a terminal (`install`, `claude`, `codex` without `--print`, `github-login`, `model list`, `awake --lid`, `rag serve`) are refused with a note to run them in a shell. `ag rag update|index|embed` runs in the background, logged under `~/.claude/lex-claude/state/direct/`. `digest.sh` does not count these prompts.
 
 ## Rules stickiness
 
@@ -286,6 +292,7 @@ lex-claude/
 ├── succeed.sh                   ← Stop-hook token trigger + successor watch + succession reroll loop
 ├── memory.py                    ← persistent project memory: forget-by-use + write-time supersession
 ├── watch.sh                     ← SessionStart watchPaths + FileChanged staleness nudge
+├── direct.sh                    ← UserPromptSubmit: runs `ag <args>` prompts without the model
 ├── digest.sh                    ← UserPromptSubmit rules-digest re-injection
 ├── style.sh                     ← PostToolUse em-dash check on user-facing md
 ├── usage.sh                     ← usage logger + `ag usage` report (debloat aid)
