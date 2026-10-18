@@ -1,6 +1,7 @@
 ---
 name: ag-docs-init
 description: Scaffold the lex-claude doc layout (PHILOSOPHY, CONTEXT, PRINCIPLES, INVARIANTS, OPS, TODO) in $PWD/docs/. Creates only missing files with minimal headers, never overwrites. Use when bootstrapping documentation in a new or undocumented project, or when the user says "scaffold our docs", "set up the docs structure", "we need docs in this project", or "give me a docs skeleton".
+disable-model-invocation: true
 ---
 
 Create the standard doc layout in `$PWD/docs/`. **Never overwrite** — only create files that are missing. Do not fill content beyond the header — that's the user's job, this skill only scaffolds.

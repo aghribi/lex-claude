@@ -1,6 +1,7 @@
 ---
 name: ag-train
 description: Hands-on training quests for this Claude setup, paired with the Betatron Training Line web game. Use when the user types /ag-train, "/ag-train <level>", asks to practise or train on the setup, or wants a quest for a station (launch, rules, skills, workspace, search, accel, safety, maint, final).
+disable-model-invocation: true
 ---
 
 Terminal quests in a sandbox: `~/ag-train/<level>` (override with `AG_TRAIN_HOME`). The real workspace, repos and identities are never modified, except in the `launch` quest, where the user switches identity and switches back.
