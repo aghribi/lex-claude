@@ -10,12 +10,15 @@ BIN_DIR="$HOME/.local/bin"
 BIN_LINK="$BIN_DIR/lex-claude"
 BIN_ALIAS="$BIN_DIR/ag"
 BIN_PKG="$BIN_DIR/pkgdev"
+BRAND_CMD="${LEX_CLAUDE_BRAND_CMD:-betatron}"   # launcher name: branded `ag claude`
+BIN_BRAND="$BIN_DIR/$BRAND_CMD"
 CODEX_DIR="${CODEX_DIR:-$HOME/.codex}"
 AGENTS_LINK="$CODEX_DIR/AGENTS.md"
 CODEX_SKILLS_DIR="$CODEX_DIR/skills"
 LANG_FILE="$INSTALL_DIR/.lang"
 MODEL_FILE="$INSTALL_DIR/.model"
 SKIP_FILE="$INSTALL_DIR/.skip"
+BRAND_FILE="$INSTALL_DIR/.brand"
 LID_RULE="/etc/sudoers.d/lex-claude-pmset"
 # ${BASH_SOURCE[0]:-$0}: BASH_SOURCE is unset when piped (curl | bash -s) and set -u would abort.
 SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." && pwd)"
@@ -77,6 +80,8 @@ Usage:
   lex-claude lang en|fr                              Set the language. Hook injects "Respond in X." at SessionStart; statusline shows it.
   lex-claude lang off                                Clear (Claude picks the language).
   lex-claude skip on|off|status                      Toggle shell function wrapper so Claude and Codex bypass approvals and sandboxing.
+  lex-claude brand on|off|status                     Run interactive Claude Code behind brand.py: identity name, own logo and terminal title. Name/colour: LEX_CLAUDE_BRAND_NAME, LEX_CLAUDE_BRAND_RGB.
+  betatron [args...]                                 Branded `ag claude` regardless of `ag brand` (launcher linked by install/update; name: LEX_CLAUDE_BRAND_CMD).
   lex-claude github-login [--token TOKEN]            Wire gh + git auth. No args: auto-detect (already authed -> no-op; GH_TOKEN/GITHUB_TOKEN; device flow if tty; ssh agent for git-only). Also sets git author (user.name/email) when unset or pod default. Idempotent, safe in hooks/rc.
   lex-claude awake [duration]                        Keep Mac awake (caffeinate -dimsu). Examples: 30m, 2h, 1h30m. No arg = until 'awake off'.
   lex-claude awake --while <pid>                     Stay awake while <pid> is alive.
@@ -291,6 +296,17 @@ deploy() {
   ln -sfn "$INSTALL_DIR/bin/lex-claude" "$BIN_LINK"
   ln -sfn "$INSTALL_DIR/bin/lex-claude" "$BIN_ALIAS"
   echo "cli: $BIN_LINK (alias: ag)"
+
+  # Never shadow a real command of the same name.
+  local other; other=$(type -P "$BRAND_CMD" 2>/dev/null || true)
+  if [ -n "$other" ] && [ "$other" != "$BIN_BRAND" ]; then
+    echo "cli: $BRAND_CMD skipped ($other already on PATH)"
+  elif [ -e "$BIN_BRAND" ] && [ ! -L "$BIN_BRAND" ]; then
+    echo "cli: $BRAND_CMD skipped ($BIN_BRAND is not a symlink)"
+  else
+    ln -sfn "$INSTALL_DIR/bin/lex-claude" "$BIN_BRAND"
+    echo "cli: $BIN_BRAND (branded ag claude)"
+  fi
 
   if [ -x "$INSTALL_DIR/bin/pkgdev" ]; then
     ln -sfn "$INSTALL_DIR/bin/pkgdev" "$BIN_PKG"
@@ -680,6 +696,34 @@ cmd_skip() {
       ;;
     *) die "unknown skip arg: $1 (expected: on, off, status)" ;;
   esac
+}
+
+cmd_brand() {
+  case "${1:-status}" in
+    on)
+      command -v uv >/dev/null 2>&1 || die "brand needs uv (brand.py runs through uv)"
+      mkdir -p "$(dirname "$BRAND_FILE")" 2>/dev/null || true
+      touch "$BRAND_FILE"
+      echo "brand: on (next interactive claude launch shows $(_brand_name))"
+      ;;
+    off)
+      rm -f "$BRAND_FILE"
+      echo "brand: off (next launch shows the stock banner)"
+      ;;
+    status)
+      [ -f "$BRAND_FILE" ] && echo "brand: on ($(_brand_name))" || echo "brand: off"
+      echo "toggle: ag brand on|off"
+      ;;
+    *) die "unknown brand arg: $1 (expected: on, off, status)" ;;
+  esac
+}
+
+# Banner name: LEX_CLAUDE_BRAND_NAME, else the active identity, capitalised.
+_brand_name() {
+  [ -n "${LEX_CLAUDE_BRAND_NAME:-}" ] && { printf '%s' "$LEX_CLAUDE_BRAND_NAME"; return; }
+  local n; n=$(basename "$(readlink "$CLAUDE_DIR/CLAUDE.md" 2>/dev/null)" .md)
+  [ -n "$n" ] || n="lex-claude"
+  printf '%s%s' "$(printf '%s' "${n:0:1}" | tr '[:lower:]' '[:upper:]')" "${n:1}"
 }
 
 cmd_model() {
@@ -1122,7 +1166,7 @@ cmd_init() {
       cat <<'EOF'
 # lex-claude zsh completion. Add to ~/.zshrc: eval "$(ag init zsh)"
 _ag() {
-  local -a cmds awake_cmds init_cmds identity_cmds rules_cmds codex_cmds install_cmds model_cmds lang_cmds skip_cmds
+  local -a cmds awake_cmds init_cmds identity_cmds rules_cmds codex_cmds install_cmds model_cmds lang_cmds skip_cmds brand_cmds
   cmds=(
     'install:bootstrap clone + symlinks + hooks'
     'update:pull latest and redeploy'
@@ -1131,6 +1175,7 @@ _ag() {
     'model:pin default Claude model'
     'lang:set Claude reply language (en|fr|off)'
     'skip:toggle Claude and Codex bypass aliases'
+    'brand:own logo, name and title on the Claude Code banner'
     'github-login:wire gh + git auth (auto-detect, idempotent)'
     'awake:keep Mac awake (caffeinate wrapper)'
     'codex:launch Codex with lex-claude context preloaded'
@@ -1149,6 +1194,7 @@ _ag() {
   model_cmds=('list:interactive model picker' 'off:clear pin (back to default)' 'sonnet:Claude Sonnet' 'opus:Claude Opus' 'haiku:Claude Haiku' 'fable:Claude Fable')
   lang_cmds=('en:English' 'fr:French' 'off:clear (Claude picks)')
   skip_cmds=('on:enable' 'off:disable' 'status:show current state')
+  brand_cmds=('on:enable' 'off:disable' 'status:show current state')
   local state
   _arguments -C '1: :->cmd' '*::arg:->args'
   case $state in
@@ -1164,6 +1210,7 @@ _ag() {
         model)    _describe 'model' model_cmds ;;
         lang)     _describe 'lang' lang_cmds ;;
         skip)     _describe 'skip' skip_cmds ;;
+        brand)    _describe 'brand' brand_cmds ;;
       esac
       ;;
   esac
@@ -1179,7 +1226,7 @@ _ag() {
   local cur prev cmds
   cur="${COMP_WORDS[COMP_CWORD]}"
   prev="${COMP_WORDS[COMP_CWORD-1]}"
-  cmds="install update identity rules model lang skip github-login awake codex claude init usage doctor version"
+  cmds="install update identity rules model lang skip brand github-login awake codex claude init usage doctor version"
   case "$prev" in
     ag|lex-claude) COMPREPLY=( $(compgen -W "$cmds" -- "$cur") ) ;;
     install)       COMPREPLY=( $(compgen -W "--yes --pkg-only" -- "$cur") ) ;;
@@ -1191,6 +1238,7 @@ _ag() {
     model)         COMPREPLY=( $(compgen -W "list off sonnet opus haiku fable best" -- "$cur") ) ;;
     lang)          COMPREPLY=( $(compgen -W "en fr off" -- "$cur") ) ;;
     skip)          COMPREPLY=( $(compgen -W "on off status" -- "$cur") ) ;;
+    brand)         COMPREPLY=( $(compgen -W "on off status" -- "$cur") ) ;;
   esac
 }
 complete -F _ag ag
@@ -1216,6 +1264,8 @@ Available subcommands (run with `ag <cmd>`):
 - `model off`                                 clear pin, back to Claude Code default
 - `lang [en|fr|off]`                          set reply language (hook injects, statusline shows)
 - `skip on|off|status`                        toggle shell wrapper for Claude and Codex permission bypass
+- `brand on|off|status`                       own logo, identity name and terminal title on the Claude Code banner (brand.py PTY proxy)
+- `betatron [args]`                           branded `ag claude`, whatever `ag brand` says (sibling launcher in ~/.local/bin)
 - `awake [30m|2h|1h30m|45s|N]`                keep Mac awake (caffeinate -dimsu)
 - `awake --while <pid>`                       stay awake while pid is alive
 - `awake --lid [duration|--while <pid>]`      also stay awake lid-closed (pmset disablesleep, reverted on stop)
@@ -1359,6 +1409,8 @@ cmd_doctor() {
   [ -f "$INSTALL_DIR/DIGEST.md" ] && echo "ok    DIGEST.md present" || echo "warn  DIGEST.md missing (digest hook is a no-op). run 'ag update'"
   [ -f "$MODEL_FILE" ] && echo "ok    model pinned: $(cat "$MODEL_FILE")" || echo "ok    model: default"
   [ -f "$SKIP_FILE" ] && echo "ok    skip: on" || echo "ok    skip: off"
+  [ -f "$BRAND_FILE" ] && echo "ok    brand: on ($(_brand_name))" || echo "ok    brand: off"
+  [ -L "$BIN_BRAND" ] && echo "ok    $BRAND_CMD launcher ($BIN_BRAND)" || echo "warn  $BRAND_CMD launcher not linked (run 'ag update')"
   if command -v pmset >/dev/null 2>&1; then
     [ -f "$LID_RULE" ] && echo "ok    awake --lid rule ($LID_RULE)" || echo "ok    awake --lid: not set up (first 'ag awake --lid' installs the rule)"
     _sleep_disabled && echo "warn  SleepDisabled is 1: the lid will not sleep this Mac. 'ag awake status' shows if ag holds it"
@@ -1402,6 +1454,17 @@ cmd_claude() {
   [ -f "$MODEL_FILE" ] && _f+=(--model "$(cat "$MODEL_FILE")")
   [ -f "$SKIP_FILE" ] && _f+=(--dangerously-skip-permissions)
 
+  # Interactive hand-over. With `ag brand on` the seat runs behind brand.py;
+  # it falls back to the bare binary when brand.py or uv is missing.
+  _claude_exec() {
+    local brand="$SELF_DIR/brand.py"; [ -f "$brand" ] || brand="$INSTALL_DIR/brand.py"
+    if { [ -f "$BRAND_FILE" ] || [ "$BRAND_FORCE" = 1 ]; } && [ -f "$brand" ] && command -v uv >/dev/null 2>&1; then
+      LEX_CLAUDE_BRAND_NAME="$(_brand_name)" exec uv run -q --no-project python -I "$brand" "$claude_bin" "$@"
+    fi
+    [ "$BRAND_FORCE" = 1 ] && echo "ag: brand.py or uv missing; launching the stock banner." >&2
+    exec "$claude_bin" "$@"
+  }
+
   # Only a FRESH interactive seat needs the cold-start check. Pass through
   # untouched: headless one-shots (-p/--print) and resumes/continues
   # (-r/--resume/-c/--continue) — resuming an existing session must not trigger a
@@ -1409,22 +1472,26 @@ cmd_claude() {
   local a
   for a in "$@"; do
     case "$a" in
-      -p|--print|-r|--resume|-c|--continue)
-        exec "$claude_bin" ${_f[@]+"${_f[@]}"} "$@" ;;
+      -p|--print) exec "$claude_bin" ${_f[@]+"${_f[@]}"} "$@" ;;
+    esac
+  done
+  for a in "$@"; do
+    case "$a" in
+      -r|--resume|-c|--continue) _claude_exec ${_f[@]+"${_f[@]}"} "$@" ;;
     esac
   done
 
   local master="$SELF_DIR/master.sh"; [ -x "$master" ] || master="$INSTALL_DIR/master.sh"
   if [ "${LEX_CLAUDE_DISABLE:-}" = "1" ] || [ "${LEX_CLAUDE_COLDSTART_DISABLE:-}" = "1" ] \
      || ! command -v jq >/dev/null 2>&1 || [ ! -x "$master" ]; then
-    exec "$claude_bin" ${_f[@]+"${_f[@]}"} "$@"
+    _claude_exec ${_f[@]+"${_f[@]}"} "$@"
   fi
 
   # No auth → every -p turn returns an error blob, subject and judge alike.
   # Rerolling cannot fix that; hand the seat over so claude runs its login flow.
   if [ "$("$claude_bin" auth status 2>/dev/null | jq -r '.loggedIn | tostring' 2>/dev/null)" = "false" ]; then
     echo "ag: claude is not logged in. Skipping the cold-start check. Log in, then relaunch." >&2
-    exec "$claude_bin" ${_f[@]+"${_f[@]}"} "$@"
+    _claude_exec ${_f[@]+"${_f[@]}"} "$@"
   fi
 
   local max="${LEX_CLAUDE_SUCCESSION_MAX:-3}"; case "$max" in *[!0-9]*|"") max=3 ;; esac
@@ -1432,7 +1499,7 @@ cmd_claude() {
   local pdir="$HOME/.claude/projects/$(printf '%s' "$PWD" | sed 's#[^A-Za-z0-9]#-#g')"
   # Private 0700 dir for the preflight files; no predictable /tmp fallback.
   local tmpd; tmpd=$(mktemp -d 2>/dev/null) \
-    || { echo "ag: cannot create a temp dir; launching unverified." >&2; exec "$claude_bin" ${_f[@]+"${_f[@]}"} "$@"; }
+    || { echo "ag: cannot create a temp dir; launching unverified." >&2; _claude_exec ${_f[@]+"${_f[@]}"} "$@"; }
   local tmp="$tmpd/answer"
   local prompt="In 6 lines max: state your identity (name) and your core non-negotiable rules, in your own words."
 
@@ -1445,7 +1512,7 @@ cmd_claude() {
       _coldstart_heal "$link"; attempt=$((attempt+1)); continue
     fi
     uuid=$(uuidgen 2>/dev/null || cat /proc/sys/kernel/random/uuid 2>/dev/null)
-    [ -n "$uuid" ] || { echo "ag: no uuid source; launching raw." >&2; rm -rf "$tmpd"; exec "$claude_bin" ${_f[@]+"${_f[@]}"} "$@"; }
+    [ -n "$uuid" ] || { echo "ag: no uuid source; launching raw." >&2; rm -rf "$tmpd"; _claude_exec ${_f[@]+"${_f[@]}"} "$@"; }
     # Verify the REAL session: run the identity self-report as turn 1 of the
     # persisted session, judge THAT turn. set -e/pipefail: a failed turn rerolls.
     # Keep the failure reason: a silent 3/3 reroll is undebuggable.
@@ -1455,7 +1522,7 @@ cmd_claude() {
     if [ "$(jq -r '.is_error // false' "$tmp.raw" 2>/dev/null)" = "true" ]; then
       echo "ag: preflight turn errored: $(jq -r '.result // empty' "$tmp.raw" | head -c 200). Launching unverified." >&2
       rm -rf "$tmpd" "$pdir/$uuid.jsonl" 2>/dev/null || true
-      exec "$claude_bin" ${_f[@]+"${_f[@]}"} "$@"
+      _claude_exec ${_f[@]+"${_f[@]}"} "$@"
     fi
     jq -r '.result // empty' "$tmp.raw" > "$tmp" 2>/dev/null || true
     local reason
@@ -1464,7 +1531,7 @@ cmd_claude() {
     elif reason=$("$master" verify --answer "$tmp" --phase identity 2>"$tmp.merr"); then
       rm -rf "$tmpd"
       # Hand over the verified session itself; your work continues as turn 2+.
-      exec "$claude_bin" ${_f[@]+"${_f[@]}"} --resume "$uuid" "$@"
+      _claude_exec ${_f[@]+"${_f[@]}"} --resume "$uuid" "$@"
     else
       reason="master: $(printf '%s' "$reason" | jq -r '.reason // empty' 2>/dev/null || printf '%s' "$reason")"
       # An empty verdict means the judge itself broke: show why instead of "master: ."
@@ -1477,11 +1544,18 @@ cmd_claude() {
   done
   rm -rf "$tmpd"
   echo "ag: WARNING: cold-start verification failed $max times. Identity load looks structurally broken; run 'ag doctor'. Launching anyway (unverified)." >&2
-  exec "$claude_bin" ${_f[@]+"${_f[@]}"} "$@"
+  _claude_exec ${_f[@]+"${_f[@]}"} "$@"
 }
 
+# Called as the brand launcher: a branded `ag claude`, whatever `ag brand` says.
+BRAND_FORCE=0
+if [ "$(basename "$0")" = "$BRAND_CMD" ]; then
+  BRAND_FORCE=1
+  set -- claude "$@"
+fi
+
 case "${1:-}" in
-  install|update|__deploy|identity|rules|model|lang|skip|version|github-login|awake|codex|claude|init|doctor|usage|-v|--version|-h|-help|--help|help|"") ;;
+  install|update|__deploy|identity|rules|model|lang|skip|brand|version|github-login|awake|codex|claude|init|doctor|usage|-v|--version|-h|-help|--help|help|"") ;;
   *) auto_update "$@" ;;
 esac
 
@@ -1508,6 +1582,7 @@ case "${1:-}" in
   model)        shift; cmd_model "$@" ;;
   lang)         shift; cmd_lang "$@" ;;
   skip)         shift; cmd_skip "$@" ;;
+  brand)        shift; cmd_brand "$@" ;;
   github-login) shift; cmd_github_login "$@" ;;
   awake)        shift; cmd_awake "$@" ;;
   codex)        shift; cmd_codex "$@" ;;
