@@ -83,6 +83,8 @@ ag identity new --name <n> --empty                 # create identity without sha
 ag rules sync                                      # re-inject RULES.md into every managed identity
 ag lang [en|fr|off]                                # set / clear Claude reply language (hook injects, statusline shows)
 ag skip on|off|status                              # toggle aliases: Claude skips permissions, Codex bypasses approvals and sandboxing
+ag brand on|off|status                             # own logo, identity name and terminal title on the Claude Code banner
+betatron [args]                                    # branded `ag claude` whatever `ag brand` says (rename: LEX_CLAUDE_BRAND_CMD)
 ag codex [--lite|--full] [prompt]                  # launch Codex with lex-claude context preloaded
 ag codex --print [--lite|--full] [prompt]          # inspect the generated Codex prompt without launching
 ag usage                                           # report which commands + skills get used; never-used = debloat candidates
@@ -103,6 +105,23 @@ pkgdev --status <pkg>            # installed version, location, editable source
 ```
 
 Short names: `xtrack`, `xpart`, `xobjects`, `xfields`, `xdeps`, `xwakes`, `xcoll` (github.com/xsuite), `cheetah` (github.com/desy-ml/cheetah, PyPI `cheetah-accelerator`). Run inside the env to modify (uv targets the activated venv or `./.venv`). Clone base: `$TMPDIR/pkgdev`, override with `PKGDEV_HOME`.
+
+### ag brand
+
+Claude Code has no setting for its banner. With `ag brand on`, `ag claude` runs every interactive seat behind `brand.py`, a PTY proxy that repaints the logo cells, the bold product name and the terminal title:
+
+```
+╭───●───╮  Betatron    v2.1.292
+│   β   │  Opus 5.5 · Claude Pro
+╰───────╯  /path/to/project
+```
+
+- Name: the active identity, capitalised (max 11 cells). Override: `LEX_CLAUDE_BRAND_NAME`.
+- Colour: `LEX_CLAUDE_BRAND_RGB` (default `63;169;245`).
+- Headless runs (`-p`, the cold-start pre-flight) and non-TTY stdio bypass the proxy.
+- Ctrl+Z works: the proxy suspends Claude Code and itself, `fg` restores the terminal modes and forces a repaint.
+- Tested on Claude Code 2.1.292: fullscreen and classic renderer, `CLAUDE_CODE_HIDE_CWD`, resize, Ctrl+L, `/clear`. The match keys on the logo's `▐` glyph and its column; re-test after a Claude Code update.
+- Cosmetic only. "Claude" still shows in the plan name, dialogs and tips; `ps`, `~/.claude` and request headers still name the tool.
 
 ### agent-browser-bg
 
