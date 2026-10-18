@@ -1511,7 +1511,9 @@ cmd_claude() {
       echo "ag: identity symlink missing/broken ($link), attempt $attempt/$max." >&2
       _coldstart_heal "$link"; attempt=$((attempt+1)); continue
     fi
-    uuid=$(uuidgen 2>/dev/null || cat /proc/sys/kernel/random/uuid 2>/dev/null)
+    # Lowercase: claude names the jsonl in lowercase, and the rm below must hit it
+    # on a case-sensitive volume too.
+    uuid=$({ uuidgen 2>/dev/null || cat /proc/sys/kernel/random/uuid 2>/dev/null; } | tr 'A-F' 'a-f')
     [ -n "$uuid" ] || { echo "ag: no uuid source; launching raw." >&2; rm -rf "$tmpd"; _claude_exec ${_f[@]+"${_f[@]}"} "$@"; }
     # Verify the REAL session: run the identity self-report as turn 1 of the
     # persisted session, judge THAT turn. set -e/pipefail: a failed turn rerolls.
