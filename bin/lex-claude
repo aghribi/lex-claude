@@ -82,7 +82,7 @@ Usage:
   lex-claude lang off                                Clear (Claude picks the language).
   lex-claude skip on|off|status                      Toggle shell function wrapper so Claude and Codex bypass approvals and sandboxing.
   lex-claude brand on|off|status                     Run interactive Claude Code behind brand.py: identity name, own logo and terminal title. Name/colour: LEX_CLAUDE_BRAND_NAME, LEX_CLAUDE_BRAND_RGB.
-  betatron [args...]                                 Branded `ag claude` regardless of `ag brand` (launcher linked by install/update; name: LEX_CLAUDE_BRAND_CMD).
+  betatron [args...]                                 Branded 'ag claude' regardless of 'ag brand' (launcher linked by install/update; name: LEX_CLAUDE_BRAND_CMD).
   lex-claude github-login [--token TOKEN]            Wire gh + git auth. No args: auto-detect (already authed -> no-op; GH_TOKEN/GITHUB_TOKEN; device flow if tty; ssh agent for git-only). Also sets git author (user.name/email) when unset or pod default. Idempotent, safe in hooks/rc.
   lex-claude awake [duration]                        Keep Mac awake (caffeinate -dimsu). Examples: 30m, 2h, 1h30m. No arg = until 'awake off'.
   lex-claude awake --while <pid>                     Stay awake while <pid> is alive.
