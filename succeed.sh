@@ -65,25 +65,43 @@ context_tokens() {
     2>/dev/null | awk 'NF' | tail -1
 }
 
-# The turn that just ended: the last human prompt (user entry with string
-# content; tool results are arrays) and everything the assistant said/did after
-# it. Each human prompt opens a new record (marker line), awk keeps the last
-# record. Rendered as plain text for the master, bounded so a chatty turn does
-# not blow the judge's prompt.
+# The turn that just ended, plus the previous one for context (an approval or a
+# cost warning given there). Human prompts are user entries with string content;
+# mid-turn prompts are queued_command attachments. Tool results are kept, cut to
+# 300 chars, so the master can trace a number to its source. Each human prompt
+# opens a record (marker line); awk keeps the last two and clips each to head +
+# tail, so a long turn keeps its ending.
 render_turn() {
-  jq -Rr 'fromjson? | select(.type=="user" or .type=="assistant")
-    | if .type=="user" then
-        (if (.message.content|type)=="string" and ((.message.content|startswith("<task-notification>"))|not) then "@@TURN@@\nUSER: " + .message.content else empty end)
-      else
-        (.message.content
-          | if type=="string" then . else
-              map(if .type=="text" then .text
-                  elif .type=="tool_use" then "[tool " + .name + "] " + ((.input.command // .input.file_path // .input.description // (.input|tostring)) | tostring | .[0:240])
-                  else empty end) | join("\n")
-            end)
-      end' "$1" 2>/dev/null \
-  | awk '/^@@TURN@@$/ {buf=""; next} {buf = buf $0 "\n"} END {printf "%s", buf}' \
-  | head -c 9000
+  jq -Rr 'fromjson? | (
+    if .type=="user" then
+      (.message.content
+        | if type=="string" then
+            (if startswith("<task-notification>") then empty else "@@TURN@@\nUSER: " + . end)
+          else
+            map(select(.type=="tool_result")
+                | "[result] " + ((.content | if type=="string" then . else (map(.text // empty) | join(" ")) end) | .[0:300]))
+            | join("\n")
+          end)
+    elif .type=="attachment" and .attachment.type=="queued_command" then
+      "USER (mid-turn): " + (.attachment.prompt | tostring)
+    elif .type=="assistant" then
+      (.message.content
+        | if type=="string" then . else
+            map(if .type=="text" then .text
+                elif .type=="tool_use" then "[tool " + .name + "] " + ((.input.command // .input.file_path // .input.description // (.input|tostring)) | tostring | .[0:240])
+                else empty end) | join("\n")
+          end)
+    else empty end) | select(length > 0)' "$1" 2>/dev/null \
+  | awk 'function clip(s, h, t) {
+           if (length(s) <= h + t) return s
+           return substr(s, 1, h) "\n[... elided ...]\n" substr(s, length(s) - t + 1)
+         }
+         /^@@TURN@@$/ {prev = cur; cur = ""; n++; next}
+         {cur = cur $0 "\n"}
+         END {
+           if (n > 1) printf "=== PREVIOUS TURN (clipped) ===\n%s\n=== THIS TURN ===\n", clip(prev, 600, 1600)
+           printf "%s", clip(cur, 3000, 15000)
+         }'
 }
 
 # Project transcript dir for a cwd (Claude Code slug: every non-alphanumeric -> "-").

@@ -97,7 +97,11 @@ elif [ "$phase" = "trajectory" ]; then
 You are a verifier watching a SUCCESSOR session that took over briefed work. The
 BRIEFING (ground truth) describes the project, the task in flight and the next
 step. The TURN below is what the successor just did: the user's prompt for that
-turn, then the successor's statements and tool calls. Decide whether it is ON TRACK.
+turn, mid-turn user prompts, the successor's statements, its tool calls and their
+results ([result], cut to 300 chars). The previous turn comes first, clipped, for
+context: approvals and warnings given there count. Both are excerpts and
+"[... elided ...]" marks removed text: a figure or step missing from the excerpt
+is not evidence that it was invented or skipped. Decide whether it is ON TRACK.
 
 PASS if: the turn advances the briefed next step, or verifies/reads state the
 briefing describes before acting (checking before touching is on track), or
@@ -115,7 +119,7 @@ Respond with ONLY a JSON object, no prose, no markdown fences:
 === BRIEFING (ground truth) ===
 $briefing
 
-=== SUCCESSOR'S TURN (user prompt, then statements + tool calls) ===
+=== SUCCESSOR'S TURN (previous turn clipped, then this turn: prompts, statements, tool calls, results) ===
 $subject_answer
 EOF
 else
