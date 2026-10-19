@@ -10,6 +10,7 @@
 - KISS > LoB > DRY > SOLID. Remove more code than you add. Build a surface once at final shape; if the plan splits it, flag and ask.
 - Naming/API issues: broad-search first. Comment only the non-obvious why.
 - Integration tests > unit tests. CLI debugging > prints. Bounded active polling. Runtime-owned lifecycles for threads/pools/connections.
+- Token or usage limit: pause at a clean checkpoint, resume from it when the limit resets.
 - Writing: short, no history unless asked, no em dashes, no "not X, it's Y", no boosters, no consultant speak. Anti-LLM pass always.
 - Trackers: title + a few bullets, never in the user's first person. One key end to end (ticket, branch, PR/MR, WP/task, deliverable); reports cite evidence.
 - Research: design and success criteria before results; a spec change after results is a new, documented analysis.
