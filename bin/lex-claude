@@ -10,6 +10,7 @@ BIN_DIR="$HOME/.local/bin"
 BIN_LINK="$BIN_DIR/lex-claude"
 BIN_ALIAS="$BIN_DIR/ag"
 BIN_PKG="$BIN_DIR/pkgdev"
+BIN_MISSION="$BIN_DIR/mission"
 BRAND_CMD="${LEX_CLAUDE_BRAND_CMD:-betatron}"   # launcher name: branded `ag claude`
 BIN_BRAND="$BIN_DIR/$BRAND_CMD"
 CODEX_DIR="${CODEX_DIR:-$HOME/.codex}"
@@ -104,6 +105,8 @@ Sibling binary (deployed alongside ag):
   pkgdev --quick <spec>         Skip clone: uv pip install --force-reinstall git+...@branch.
   pkgdev --release <pkg>        Back to the PyPI release.
   pkgdev --status <pkg>         Show the installed version and where it comes from.
+  mission                       Questionnaire: create missions/mis_<date>_<project>/ and fill the DEMANDE-MISSION docx.
+  mission <date> <project> [flags]  Same without questions ('mission --help' lists the flags).
 EOF
 }
 
@@ -317,6 +320,11 @@ deploy() {
   if [ -x "$INSTALL_DIR/bin/pkgdev" ]; then
     ln -sfn "$INSTALL_DIR/bin/pkgdev" "$BIN_PKG"
     echo "cli: $BIN_PKG (Python package branch switcher)"
+  fi
+
+  if [ -x "$INSTALL_DIR/bin/mission" ]; then
+    ln -sfn "$INSTALL_DIR/bin/mission" "$BIN_MISSION"
+    echo "cli: $BIN_MISSION (mission folder + DEMANDE-MISSION request)"
   fi
 
   local sl_target="$CLAUDE_DIR/statusline-command.sh"
@@ -1305,6 +1313,11 @@ in the active env at a git branch):
 - `pkgdev --status <pkg>`                      installed version and source
 - `ag install --pkg-only`                      install just `pkgdev` (no identity/rules/skills/hook)
 
+Sibling binary `mission` (deployed alongside `ag`): run bare in a terminal for the
+questionnaire, or `mission <YYYYMMDD> <project> [flags]` non-interactively
+(`mission --help`). Creates `missions/mis_<date>_<project>/{_demande,_om,_reservations,_invoices}`
+and fills `_demande/DEMANDE-MISSION_<date>_<project>.docx` from the template.
+
 Notes:
 - Plain `ag awake` does not survive closing the lid: caffeinate assertions do
   not cover it. `ag awake --lid` does (pmset disablesleep, verified on Apple
@@ -1410,6 +1423,11 @@ cmd_doctor() {
     echo "ok    pkgdev ($BIN_PKG)"
   else
     echo "warn  pkgdev not symlinked (run 'ag update' or 'ag install --pkg-only')"
+  fi
+  if [ -L "$BIN_MISSION" ] && [ -e "$BIN_MISSION" ]; then
+    echo "ok    mission ($BIN_MISSION)"
+  else
+    echo "warn  mission not symlinked (run 'ag update')"
   fi
   ensure_path_in_rc || ok=0
   _hook_wired "lex-claude/usage" && echo "ok    usage hook wired" || echo "warn  usage hook not wired (skill tracking off). run 'ag update'"

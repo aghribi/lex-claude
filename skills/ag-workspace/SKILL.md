@@ -31,6 +31,8 @@ Personal outputs live in `resources_active/_my_active/my_<kind>_active/` (public
 
 `scripts/new_item.sh <type> <name> [--date YYYYMMDD] [--category DIR] [--dry-run]`: copies the template, fills name and date in `read_me.md`, refuses to overwrite. Types: `project proposal presentation poster conference publication review-article review-call supervision training application`. Run `--dry-run` first and show the destination.
 
+Missions: the `mission` command (on PATH, from `lex-claude/bin/mission`). Bare `mission` is an interactive questionnaire for the user's terminal; from Claude always pass `mission <YYYYMMDD> <project> [--to YYYYMMDD] [--objet ..] [--lieu ..] [--transport train|avion|location|service] [--depart ..] [--retour ..] [--imputation ..] [--frais avec|sans] [--charge ganil|sans|cea] [--avance oui|non] [--dry-run]`. It creates `work_administration_active/missions/mis_<date>_<project>/{_demande,_om,_reservations,_invoices}` and fills `_demande/DEMANDE-MISSION_<date>_<project>.docx` from `templates_active/missions/DEMANDE-MISSION.docx` (Word form fields). `--help` lists every field. Accepts an existing empty folder, refuses a non-empty one.
+
 ## Naming
 
 - Dated items (presentations, posters, conferences, trainings, meetings, events): `YYYYMMDD_<name>` (start date), inside the year folder where one exists. Older `YYYY_MM_name` folders stay as they are.

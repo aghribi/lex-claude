@@ -1,0 +1,247 @@
+#!/usr/bin/env -S uv run --quiet --script
+# /// script
+# requires-python = ">=3.10"
+# dependencies = ["python-docx>=1.1"]
+# ///
+"""Create a mission folder and fill its DEMANDE-MISSION request from the template.
+
+Run bare for the questionnaire. Pass date and project (plus flags) to skip it."""
+import argparse
+import os
+import shutil
+import sys
+from datetime import datetime
+from pathlib import Path
+
+import docx
+from docx.oxml.ns import qn
+
+WS = Path(os.environ.get("AG_WORKSPACE", Path.home() / "Documents/work_space"))
+MISSIONS = WS / "resources_active/work_administration_active/missions"
+TEMPLATE = WS / "resources_active/templates_active/missions/DEMANDE-MISSION.docx"
+SUBDIRS = ["_demande", "_om", "_reservations", "_invoices"]
+
+# Named text fields of the template.
+TEXT = {
+    "nom": "Texte1", "autres": "Texte2", "objet": "Texte4", "du": "Texte5", "au": "Texte6",
+    "lieu": "Texte7", "transport_autre": "Texte8", "depart": "Texte9", "retour": "Texte10",
+    "vl_depart_lieu": "Texte20", "vl_depart_date": "Texte21", "vl_depart_heure": "Texte24",
+    "vl_retour_lieu": "Texte201", "vl_retour_date": "Bookmark", "vl_retour_heure": "Texte25",
+    "vl_personnes": "Texte13", "billet": "Texte14", "carte": "Texte15", "inscription_cout": "Texte16",
+    "convenance": "Texte17", "imputation": "Texte18", "autre_organisme": "Texte19",
+}
+
+# Checkboxes are unnamed: identified by position, in document order.
+CHECKBOXES = [
+    "AVEC FRAIS", "SANS FRAIS", "INSCRIPTION CONGRES", "Avion", "Train", "Véhicule location",
+    "Véhicule de service", "à régler par l’agent", "à régler par GANIL", "A la charge du GANIL",
+    "Sans frais pour le GANIL", "A refacturer au CEA", "partielle:Voyage", "partielle:Séjour",
+    "autre:Voyage", "autre:Séjour", "OUI", "NON",
+]
+TRANSPORT = {"avion": "Avion", "train": "Train", "location": "Véhicule location", "service": "Véhicule de service"}
+CHARGE = {"ganil": "A la charge du GANIL", "sans": "Sans frais pour le GANIL", "cea": "A refacturer au CEA"}
+PART = {"voyage": "Voyage", "sejour": "Séjour"}
+
+
+def fields(doc):
+    """Yield (ffData, result_runs) for every legacy form field, in document order."""
+    ff, runs, in_result = None, [], False
+    for r in doc.element.body.iter(qn("w:r")):
+        fc = r.find(qn("w:fldChar"))
+        kind = fc.get(qn("w:fldCharType")) if fc is not None else None
+        if kind == "begin" and fc.find(qn("w:ffData")) is not None:
+            ff, runs, in_result = fc.find(qn("w:ffData")), [], False
+        elif ff is not None and kind == "separate":
+            in_result = True
+        elif ff is not None and kind == "end":
+            yield ff, runs
+            ff = None
+        elif ff is not None and in_result:
+            runs.append(r)
+
+
+def set_text(runs, value):
+    ts = [t for r in runs for t in r.iter(qn("w:t"))]
+    ts[0].text = value
+    for t in ts[1:]:
+        t.text = ""
+
+
+def set_checked(ff, on):
+    cb = ff.find(qn("w:checkBox"))
+    c = cb.find(qn("w:checked"))
+    if c is None:
+        c = cb.makeelement(qn("w:checked"), {})
+        cb.append(c)
+    c.set(qn("w:val"), "1" if on else "0")
+
+
+def fill(path, text, checked):
+    doc = docx.Document(path)
+    by_name, boxes = {}, []
+    for ff, runs in fields(doc):
+        if ff.find(qn("w:checkBox")) is not None:
+            boxes.append(ff)
+        else:
+            by_name[ff.find(qn("w:name")).get(qn("w:val"))] = runs
+    if len(boxes) != len(CHECKBOXES):
+        sys.exit(f"error: template has {len(boxes)} checkboxes, expected {len(CHECKBOXES)}. Update CHECKBOXES.")
+    for key, value in text.items():
+        if TEXT[key] not in by_name:
+            sys.exit(f"error: field {TEXT[key]} ({key}) missing from template")
+        set_text(by_name[TEXT[key]], value)
+    # Every box is written: the template ships some boxes pre-checked.
+    for label, ff in zip(CHECKBOXES, boxes):
+        set_checked(ff, label in checked)
+    doc.save(path)
+
+
+def valid_date(s):
+    try:
+        datetime.strptime(s, "%Y%m%d")
+        return True
+    except ValueError:
+        return False
+
+
+def valid_project(s):
+    return bool(s) and s.replace("_", "").isalnum() and s == s.lower()
+
+
+def ask(label, default=None, check=None, required=False):
+    hint = f" [{default}]" if default else ""
+    while True:
+        v = input(f"{label}{hint}: ").strip() or (default or "")
+        if not v and not required:
+            return None
+        if v and (check is None or check(v)):
+            return v
+        print("  invalid, try again")
+
+
+def pick(label, options, default=None, many=False):
+    opts = "/".join(options)
+    while True:
+        v = ask(f"{label} ({opts}{', comma separated' if many else ''})", default)
+        if v is None:
+            return [] if many else None
+        vals = [x.strip() for x in v.split(",")] if many else [v]
+        if all(x in options for x in vals):
+            return vals if many else vals[0]
+        print(f"  choose from {opts}")
+
+
+def questionnaire(a):
+    """Ask for every value not already given on the command line."""
+    print("New mission. Enter skips an optional field.\n")
+    a.date = a.date or ask("Start date YYYYMMDD", check=valid_date, required=True)
+    a.to = a.to or ask("End date YYYYMMDD", default=a.date, check=valid_date)
+    a.project = a.project or ask("Project (lowercase, underscores)", check=valid_project, required=True)
+    a.objet = a.objet or ask("Objet de la mission", required=True)
+    a.lieu = a.lieu or ask("Lieu", required=True)
+    a.autres = a.autres or ask("Autres participants")
+    a.frais = a.frais or pick("Frais", ["avec", "sans"], default="avec")
+    a.transport = a.transport or pick("Transport", list(TRANSPORT) + ["autre"], many=True)
+    if "autre" in a.transport:
+        a.transport.remove("autre")
+        a.transport_autre = a.transport_autre or ask("Autre transport", required=True)
+    a.depart = a.depart or ask("Départ (lieu, date, heures)")
+    a.retour = a.retour or ask("Retour (lieu, date, heures)")
+    if "location" in a.transport:
+        a.vl_depart_lieu = a.vl_depart_lieu or ask("VL départ lieu")
+        a.vl_depart_date = a.vl_depart_date or ask("VL départ date")
+        a.vl_depart_heure = a.vl_depart_heure or ask("VL départ horaire")
+        a.vl_retour_lieu = a.vl_retour_lieu or ask("VL retour lieu")
+        a.vl_retour_date = a.vl_retour_date or ask("VL retour date")
+        a.vl_retour_heure = a.vl_retour_heure or ask("VL retour horaire")
+        a.vl_personnes = a.vl_personnes or ask("Personnes dans le VL")
+    a.billet = a.billet or ask("Billet déjà réservé")
+    a.carte = a.carte or ask("Carte de réduction")
+    if not a.inscription:
+        a.inscription = pick("Inscription congrès", ["oui", "non"], default="non") == "oui"
+    if a.inscription:
+        a.inscription_cout = a.inscription_cout or ask("Coût de l'inscription")
+        a.inscription_par = a.inscription_par or pick("Inscription réglée par", ["agent", "ganil"])
+    a.convenance = a.convenance or ask("Convenance personnelle")
+    a.imputation = a.imputation or ask("Imputation (ligne budgétaire)")
+    a.charge = a.charge or pick("Prise en charge", list(CHARGE))
+    a.partielle = a.partielle or pick("Prise en charge partielle GANIL", list(PART), many=True)
+    a.autre_organisme = a.autre_organisme or ask("Autre organisme (lequel)")
+    if a.autre_organisme:
+        a.autre_prise = a.autre_prise or pick("Pris en charge par cet organisme", list(PART), many=True)
+    a.avance = a.avance or pick("Demande d'avance", ["oui", "non"], default="non")
+
+
+def main():
+    p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    p.add_argument("date", nargs="?", help="start date YYYYMMDD")
+    p.add_argument("project", nargs="?", help="short name, lowercase, underscores")
+    p.add_argument("--to", help="end date YYYYMMDD")
+    p.add_argument("--transport", choices=TRANSPORT, action="append", default=[])
+    p.add_argument("--frais", choices=["avec", "sans"])
+    p.add_argument("--inscription", action="store_true", help="tick INSCRIPTION CONGRES")
+    p.add_argument("--inscription-par", choices=["agent", "ganil"])
+    p.add_argument("--charge", choices=CHARGE)
+    p.add_argument("--partielle", choices=PART, action="append", default=[], help="prise en charge partielle GANIL")
+    p.add_argument("--autre-prise", choices=PART, action="append", default=[], help="prise en charge autre organisme")
+    p.add_argument("--avance", choices=["oui", "non"])
+    for key in TEXT:
+        if key not in ("du", "au"):
+            p.add_argument("--" + key.replace("_", "-"), dest=key)
+    p.add_argument("--dry-run", action="store_true")
+    a = p.parse_args()
+
+    interactive = not (a.date and a.project)
+    if interactive:
+        try:
+            questionnaire(a)
+        except (KeyboardInterrupt, EOFError):
+            sys.exit("\naborted")
+    if not valid_date(a.date) or (a.to and not valid_date(a.to)):
+        sys.exit("error: dates must be YYYYMMDD")
+    if not valid_project(a.project):
+        sys.exit("error: project must be lowercase letters, digits, underscores")
+
+    dest = MISSIONS / f"mis_{a.date}_{a.project}"
+    out = dest / "_demande" / f"DEMANDE-MISSION_{a.date}_{a.project}.docx"
+    if dest.exists() and any(x.name != ".DS_Store" for x in dest.iterdir()):
+        sys.exit(f"error: not empty: {dest}")
+    if not TEMPLATE.exists():
+        sys.exit(f"error: template missing: {TEMPLATE}")
+
+    ddmmyy = lambda s: datetime.strptime(s, "%Y%m%d").strftime("%d/%m/%y")
+    text = {k: getattr(a, k) for k in TEXT if getattr(a, k, None)}
+    text["du"] = ddmmyy(a.date)
+    if a.to:
+        text["au"] = ddmmyy(a.to)
+    checked = {TRANSPORT[t] for t in a.transport}
+    checked |= {f"partielle:{PART[x]}" for x in a.partielle} | {f"autre:{PART[x]}" for x in a.autre_prise}
+    if a.frais:
+        checked.add("AVEC FRAIS" if a.frais == "avec" else "SANS FRAIS")
+    if a.inscription:
+        checked.add("INSCRIPTION CONGRES")
+    if a.inscription_par:
+        checked.add(f"à régler par {'l’agent' if a.inscription_par == 'agent' else 'GANIL'}")
+    if a.charge:
+        checked.add(CHARGE[a.charge])
+    if a.avance:
+        checked.add(a.avance.upper())
+
+    print(f"\n{dest}/{{{','.join(SUBDIRS)}}}\n{out}")
+    for k, v in text.items():
+        print(f"  {k}: {v}")
+    for c in sorted(checked):
+        print(f"  [x] {c}")
+    if a.dry_run:
+        return
+    if interactive and input("\nCreate? [Y/n] ").strip().lower() not in ("", "y", "yes", "o", "oui"):
+        sys.exit("aborted")
+    for s in SUBDIRS:
+        (dest / s).mkdir(parents=True, exist_ok=True)
+    shutil.copy2(TEMPLATE, out)
+    fill(out, text, checked)
+    print(f"created {out}")
+
+
+if __name__ == "__main__":
+    main()

@@ -108,6 +108,18 @@ pkgdev --status <pkg>            # installed version, location, editable source
 
 Short names: `xtrack`, `xpart`, `xobjects`, `xfields`, `xdeps`, `xwakes`, `xcoll` (github.com/xsuite), `cheetah` (github.com/desy-ml/cheetah, PyPI `cheetah-accelerator`). Run inside the env to modify (uv targets the activated venv or `./.venv`). Clone base: `$TMPDIR/pkgdev`, override with `PKGDEV_HOME`.
 
+### mission
+
+Sibling binary deployed alongside `ag` by `ag install` / `ag update`. Needs `uv` (python-docx is fetched on first run).
+
+```
+mission                                   # questionnaire, summary, confirm, create
+mission 20261103 iris --to 20261107 --objet "..." --lieu Paris --transport train --dry-run
+mission --help                            # every form field as a flag
+```
+
+Creates `$AG_WORKSPACE/resources_active/work_administration_active/missions/mis_<date>_<project>/{_demande,_om,_reservations,_invoices}` and fills `_demande/DEMANDE-MISSION_<date>_<project>.docx` from `resources_active/templates_active/missions/DEMANDE-MISSION.docx` (Word legacy form fields: name, dates, place, transport, imputation, checkboxes). Reuses an empty mission folder, refuses a non-empty one.
+
 ### ag brand
 
 Claude Code has no setting for its banner. With `ag brand on`, `ag claude` runs every interactive seat behind `brand.py`, a PTY proxy that repaints the logo cells, the bold product name and the terminal title:
