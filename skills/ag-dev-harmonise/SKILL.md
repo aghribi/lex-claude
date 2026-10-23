@@ -5,6 +5,8 @@ description: Organise a research project's `_development` area across code hosts
 
 Reference execution: FCCee, Oct 2026 (`projects_active/FCCee/_development/read_me.md`, xsuite_heb `code/build_run_index.py`). Read them before starting: they are the worked example.
 
+Day-to-day rules once the project is organised (where code, env, results and documents live; sites; container environment; validation; site pitfalls): `WORKFLOW.md` in this skill.
+
 Target state:
 - Code lives on the code host. Each site holds clones, never copies. One clone per repo per site at a fixed path; a second version is a `git worktree`.
 - Versioning: a branch per big evolution (physics model, input set, output schema, breaking CLI), an annotated `vN.M` tag per small one, a version table on `master`. Every run records `code_branch`, `code_version` (`git describe`), `code_commit`.
