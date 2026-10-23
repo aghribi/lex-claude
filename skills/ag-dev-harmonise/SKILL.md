@@ -1,6 +1,6 @@
 ---
 name: ag-dev-harmonise
-description: Organise a research project's `_development` area across code hosts (GitLab, GitHub), compute sites (clusters, EOS, laptops) and data locations - one clone per repo per site, versions as branches and tags, results at the sites with one run index, input provenance per run, a map read_me. Use when the user asks to harmonise, clean up, consolidate or organise a dev project's code and data across machines, or to apply "the FCCee method" to another project.
+description: Organise a research project's `_development` area across code hosts (GitLab, GitHub), compute sites (clusters, EOS, laptops) and data locations - one clone per repo per site, versions as branches and tags, results at the sites with one run index, input provenance per run, a map read_me. Use when the user asks to harmonise, clean up, consolidate or organise a dev project's code and data across machines, to apply "the FCCee method" to another project, or to prepare a publication release (Zenodo deposit) once results are frozen.
 ---
 
 Reference execution: FCCee, Oct 2026 (`projects_active/FCCee/_development/read_me.md`, xsuite_heb `code/build_run_index.py`). Read them before starting: they are the worked example.
@@ -31,6 +31,19 @@ Plan first, get approval, then one phase at a time. Report each phase before the
 Names are not unique keys: check duplicate ids by file hashes (identical, subset, disjoint) before calling anything a duplicate; key the index on path.
 
 **P4 Inputs and docs.** Each run writes its input record into the run metadata and the output file. Placeholder upstream commits (manual placement, dry runs) are resolved by matching the recorded sha256 against the upstream file history, not by re-fetching: a re-fetch can silently change the inputs. Check the upstream HEAD too and report any input that differs (physics values, not only bytes). Fix dead paths in docs. Write the map. Update the master version table and tags, push, pull on every site.
+
+**P5 Publication release.** Only when the work reaches publication grade (results frozen, paper or report submitted). Reference: SPIRAL2 LLRF, `doi:10.5281/zenodo.22729653`.
+- Freeze: tag the code `vN.M` at the commit that produced every published number. The results manifest and figures come from that commit.
+- Deposit on Zenodo, one versioned record per release (`N.M.0`), license matching the code:
+  - the derived data a reader needs to reproduce the results (labels, features, intermediate representations) in the formats the pipeline reads;
+  - the results manifest every number in the paper traces to;
+  - a data dictionary generated from the code, never hand-written;
+  - `README.md`: contents, how to load, known caveats (for example a transform fit on the full set that must not be used for held-out results);
+  - `LICENSE`, and `CITATION.cff` complete: version, `date-released`, authors with affiliations, no TODO left.
+- Raw data too large for Zenodo stays at the site. The README says so, with size and file count taken from the P3 manifest, never measured by hand, and states how to request it.
+- Link both ways: the record `isSupplementedBy` the code repository; the repository README, the project site and the paper's data availability section cite the DOI.
+- After publishing, compare the local deposit to the record's checksums (`https://zenodo.org/api/records/<id>`, md5 per file). The local deposit folder goes once it matches.
+- A new release is a new version of the same record (concept DOI), never a new record. Record the DOI and the tag in the map's version table.
 
 ## Rules for this work
 
