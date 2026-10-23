@@ -72,6 +72,8 @@ Analyses, simulations, experiments, papers, reviews. Sources: flonat-research ru
 
 # Research tools
 - **Workspace.** New files and folders go where `ag-workspace` says, from templates; moves and archives only after confirmation; never read credential stores (KeePass, SSH vaults, recovery codes).
+- **Shared folders.** Check the owner before any write in a shared area (cluster group space, EOS project, synced folder). Files owned by someone else are never moved, renamed, edited or deleted: read and index only, report them.
+- **Dev projects across sites.** Code on the code host, one clone per repo per site, results at the sites with one run index, the laptop for analysis and report data only: `ag-dev-harmonise`.
 - **Python through uv.** `uv run`, `uv pip`, `uv venv`. Never bare `python`/`pip`: they resolve to the wrong environment.
 - **LaTeX.** Build with `latexmk` only; build artifacts go to `out/`, never the source directory. Missing package: `tlmgr install`, never a downloaded `.sty`. One line per paragraph in Overleaf-synced files; one sentence per line in git-tracked `.tex` where diffs matter.
 - **Overleaf separation.** The Overleaf-synced `paper/` folder holds LaTeX sources, `.bib` and exported figures/tables only. Code, data, notebooks, raw results and envs live in the project (`code/`, `data/`, `results/`).
