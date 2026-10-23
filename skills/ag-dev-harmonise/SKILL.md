@@ -34,16 +34,16 @@ Names are not unique keys: check duplicate ids by file hashes (identical, subset
 
 **P5 Publication release.** Only when the work reaches publication grade (results frozen, paper or report submitted). Reference: SPIRAL2 LLRF, `doi:10.5281/zenodo.22729653`.
 - Freeze: tag the code `vN.M` at the commit that produced every published number. The results manifest and figures come from that commit.
-- Deposit on Zenodo, one versioned record per release (`N.M.0`), license matching the code:
+- Deposit on Zenodo, one versioned record per release (`N.M.0`), data under CC-BY-4.0 (the code keeps its own license):
   - the derived data a reader needs to reproduce the results (labels, features, intermediate representations) in the formats the pipeline reads;
   - the results manifest every number in the paper traces to;
   - a data dictionary generated from the code, never hand-written;
   - `README.md`: contents, how to load, known caveats (for example a transform fit on the full set that must not be used for held-out results);
   - `LICENSE`, and `CITATION.cff` complete: version, `date-released`, authors with affiliations, no TODO left.
 - Raw data too large for Zenodo stays at the site. The README says so, with size and file count taken from the P3 manifest, never measured by hand, and states how to request it.
-- Link both ways: the record `isSupplementedBy` the code repository; the repository README, the project site and the paper's data availability section cite the DOI.
+- Link both ways: the record `IsCompiledBy` the code repository at the release tag; the repository README, the project site and the paper's data availability section cite the DOI.
 - After publishing, compare the local deposit to the record's checksums (`https://zenodo.org/api/records/<id>`, md5 per file). The local deposit folder goes once it matches.
-- A new release is a new version of the same record (concept DOI), never a new record. Record the DOI and the tag in the map's version table.
+- A new release is a new version of the same record (concept DOI), never a new record. Docs and papers cite the concept DOI (always the latest version); a version DOI only where a specific version is meant. Record the DOI and the tag in the map's version table.
 
 ## Rules for this work
 
