@@ -21,7 +21,7 @@ Personal outputs live in `resources_active/_my_active/my_<kind>_active/` (public
 ## Where does it go
 
 1. Is it for a funding application not yet decided? `proposals_active/<YYYY>_<call>/`, in the matching `_` folder (`_part_b`, `_budget`, `_wp_descriptions`, ...).
-2. Is it for running funded work? `projects_active/<project>/` (official documents, meetings, events, development, resources). If partners must see it, the project's `cross_sync_active/` space.
+2. Is it for running funded work? `projects_active/<project>/` (official documents, meetings, events, development, resources); code and data across machines in `_development/` follow `ag-dev-harmonise`. If partners must see it, the project's `cross_sync_active/` space.
 3. Is it something the user produced (talk, poster, paper, review, supervision, training, application)? The `_my_active/my_<kind>_active/` folder, created from its template.
 4. Is it reference material by others? `resources_active/` (`_pro_library_active`, `papers_to_read`, `documentary_resources_active`, `conferences_active`), or the project's `_resources/_documents/`.
 5. Templates and institutional charters: `resources_active/templates_active/`.

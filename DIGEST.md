@@ -18,4 +18,4 @@
 - Own numbers are observations until reproduced (seeds, instrument, magnitude). Paper numbers come from code via `\input{}`.
 - Competing hypotheses in an evidence matrix; seek the discriminating experiment; conclusions go to the user for review.
 - Tools: uv; latexmk into `out/`; no code or data in Overleaf `paper/`. Accelerator codes: read the installed API, one validated conversion per handoff.
-- Control systems read-only unless approved. Data FAIR: Parquet/HDF5, units and metadata travel with it, nothing dropped silently. Workspace: templates and `ag-workspace`; never read credential stores.
+- Control systems read-only unless approved. Data FAIR: Parquet/HDF5, units and metadata travel with it, nothing dropped silently. Workspace: templates and `ag-workspace`; never read credential stores. Shared folders: never write to files owned by someone else. Dev projects across sites: `ag-dev-harmonise`.

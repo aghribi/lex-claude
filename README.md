@@ -281,6 +281,7 @@ All custom skills are prefixed `ag-` to avoid drowning in native skills or other
 - `ag-cheetah`: Cheetah 0.8 conventions, gotchas and RL environment pattern, with `scripts/cheetah_xsuite_check.py` (Cheetah vs Xsuite agree to 1.6e-7 with `drift_kick_drift`).
 - `ag-xsuite`: Xsuite (xtrack 0.95) coordinates, Environment/twiss/match/MAD-X workflow verified by `scripts/xsuite_smoke.py`.
 - `ag-fair-data`: formats (Parquet, HDF5, openPMD, NeXus, Zarr, NetCDF), loaders, time series, ML pipelines, metadata, releases.
+- `ag-dev-harmonise`: organise a dev project's code and data across code hosts and compute sites (one clone per repo per site, branch and tag versioning, results at the sites with a Parquet run index, input provenance per run, a map `read_me.md`). Worked example: FCCee, Oct 2026.
 - `ag-workspace`: PARA work_space organisation, templates for every item type, `scripts/new_item.sh` scaffolding, naming, lifecycle, hard exclusions for credential stores.
 - `ag-rag`: local hybrid search (FTS5 + bge-m3 via Ollama, sqlite-vec) over work documents, with a read-only MCP server. Code in `tools/ag-rag/ag_rag.py`.
 - `ag-train`: hands-on quests in a sandbox (`scripts/sandbox.sh`, `scripts/check.sh`), paired with the Betatron Training Line web game.
