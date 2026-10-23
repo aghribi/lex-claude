@@ -57,5 +57,6 @@ Run the pilot job (short, same parameters every time) and compare with the refer
 - CRIANN: no container runtime on login nodes (image copied from another site); login nodes interrupt multi-threaded processes.
 - CC-IN2P3: jobs see all CPUs of the node; OpenMPI default binding put 8 OpenMP threads per rank on 1 or 2 cores (`mpirun --bind-to none`); MPI session files need `$TMPDIR` bound into the container.
 - Containers under Slurm: `mpirun` inside the image must not use the Slurm launcher (`PRTE_MCA_plm=^slurm PRTE_MCA_ras=^slurm`): there is no `srun` inside.
-- lxbatch (HTCondor): jobs run from a scratch copy of the executable, so the submit file starts `bash` in the clone; the scheduler mapping service is sometimes down (retry).
+- lxbatch (HTCondor): jobs run from a scratch copy of the executable, so the submit file starts `bash` in the clone; the scheduler mapping service is sometimes down (retry). The Kerberos ticket (`$KRB5CCNAME`) sits in the job scratch dir, which the container does not see: bind its directory, or EOS refuses writes from the image.
+- MPI: an exception on one rank outside a `try` that calls `MPI.COMM_WORLD.Abort()` leaves the other ranks blocked until the wall clock. Guard the entry point.
 - zsh does not split `$var` into words: pass job parameters as an array.
