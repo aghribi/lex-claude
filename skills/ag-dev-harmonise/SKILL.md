@@ -48,6 +48,7 @@ Names are not unique keys: check duplicate ids by file hashes (identical, subset
 ## Rules for this work
 
 - Ask before running jobs on a cluster. A doubtful input or spec stops the run.
+- The laptop clones are backed up by the sync client without `.git`; `tools/git-state/git-state.sh` (lex-claude) writes the state that makes them restorable. Check it runs (`~/.local/share/git-state/git-state.log`) before relying on the sync copy.
 - Remote deletions: list the exact paths and their verification, the user runs `! ssh <site> rm ...`. Never work around a denied delete.
 - Shared folders: check the owner (`ls -l`, `stat`) before any write. Files owned by someone else are never moved, renamed, edited or deleted; read and index only, and report them to the user.
 - Never read credential stores; tokens and keys are used only through the tools that need them (ssh, git), never printed.
