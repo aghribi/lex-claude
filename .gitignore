@@ -6,5 +6,6 @@ __pycache__/
 .skip
 usage.log
 .lang
+.brand
 .digest/
 .last-update-check

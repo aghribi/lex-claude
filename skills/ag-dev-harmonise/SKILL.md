@@ -25,7 +25,7 @@ Plan first, get approval, then one phase at a time. Report each phase before the
 
 **P2 Snapshots to clones.** For a folder copied from a repo: `git init`, add the remote, fetch, find the commit whose tree matches best, `git reset <commit>` (mixed, files untouched). Local edits go to a branch. No upstream match: record it as not in git in the map.
 
-**P3 Data.** Copy to the primary store with `rsync -a`. Verify with per-file sha256 manifests built the same way on both sides (a small Python `os.walk` + `hashlib` emitting sorted JSON, then compare digests; parsing `sha256sum` output breaks on escaped filenames). Write a `PROVENANCE.md` in each migrated folder (origin, date, file count, verification). Only then delete the source. Build the run index:
+**P3 Data.** Copy to the primary store with `rsync -a`. Verify with per-file sha256 manifests built the same way on both sides: `tools/manifest/manifest.py build ROOT -o OUT.json` (lex-claude, stdlib only; on a cluster stream it, `ssh host python3 - build ROOT < manifest.py > OUT.json`, nothing left on the site), then `manifest.py compare A.json B.json`. Never parse `sha256sum` output: it breaks on escaped filenames. Write a `PROVENANCE.md` in each migrated folder (origin, date, file count, verification). Only then delete the source. Build the run index:
 - managed rows from the run manager metadata, unmanaged rows from a walk of the store (a run dir has `data/` with output files or is empty), nearest `PROVENANCE.md` for unmanaged rows;
 - explicit dtypes, timezone-aware timestamps, units and builder version in the Parquet schema metadata;
 - atomic writes (`tempfile.mkstemp` in the target dir, `os.replace`), output paths confined to the store root;
