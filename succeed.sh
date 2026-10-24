@@ -263,6 +263,21 @@ case "${1:-}" in
     mkdir -p "$tmp" 2>/dev/null || true
     pdir=$(projects_dir "$PWD")
 
+    # The identity is one global symlink, read once at session start. After an
+    # `ag identity X` from anywhere, the successor loads X, not this session's
+    # identity (taken from the état line of this session's transcript).
+    id_warn=""
+    me="${CLAUDE_CODE_SESSION_ID:-}"; me=${me//[^A-Za-z0-9-]/}
+    if [ -n "$me" ]; then
+      pred_id=$(grep -m1 -o 'état (live) =====\\nidentity: [A-Za-z0-9_-]*' \
+        "$(projects_dir "${CLAUDE_PROJECT_DIR:-$PWD}")/$me.jsonl" 2>/dev/null | head -1 | sed 's/.*identity: //')
+      cur_id=$(basename "$(readlink "$HOME/.claude/CLAUDE.md" 2>/dev/null)" .md)
+      if [ -n "$pred_id" ] && [ "$pred_id" != "$cur_id" ]; then
+        id_warn="IDENTITY CHANGED: this session runs as $pred_id, the global identity is now ${cur_id:-?}, so the successor loads ${cur_id:-?}. To keep $pred_id: ag identity $pred_id, then rerun succession."
+        echo "$id_warn" >&2
+      fi
+    fi
+
     id_prompt="In 6 lines max: state your identity (name) and your core non-negotiable rules, in your own words."
 
     attempt=1
@@ -329,6 +344,7 @@ the user outranks both). When it tells you it is standing down, carry on alone."
         printf '%s\t%s\n' "$((pgen+1))" "$parent" > "$LINEAGE_DIR/$uuid" 2>/dev/null || true
       fi
       echo "SUCCESSOR_OK $uuid"
+      [ -n "$id_warn" ] && echo "$id_warn"
       kick=""; [ -n "$briefing_file" ] && kick="$KICKOFF"
       echo "successor verified + grounded — resume with:  claude --resume $uuid${kick:+ \"$kick\"}"
       [ -f "$WATCH_DIR/$uuid.left" ] && echo "master watch armed: its first $WATCH turns are judged against the briefing (log: $WATCH_DIR/$uuid.log)."

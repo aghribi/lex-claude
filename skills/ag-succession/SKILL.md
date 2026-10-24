@@ -78,6 +78,9 @@ Steps, in order:
      If the user asks you something meanwhile, answer, then resume waiting.
    - No peek event ever arriving means the successor never ran a turn (window
      closed, or not resumed); that is fine, stay idle. Nothing to work on here.
+   - An `IDENTITY CHANGED: ...` line (with either outcome) → relay it verbatim: the
+     global identity was switched since this session started, so the successor
+     runs under the new one. Never run `ag identity` yourself; the user decides.
    - `SUCCESSION_FAILED` → tell the user succession failed the bounded retries,
      which means identity/rules loading is likely structurally broken (worth
      investigating, not retrying blindly). Fall back to native compaction: do
