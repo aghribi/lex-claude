@@ -78,3 +78,5 @@ if [ -f "$rm_md" ]; then
     -e '/^<!-- Copy this folder/d' "$rm_md" && rm -f "$rm_md.bak"
 fi
 echo "created $dest"
+# Projects keep a work journal (_journal/), one template for all: lex-claude/templates/journal.
+[ "$type" = project ] && bash "$HOME/.claude/lex-claude/journal.sh" init "$dest"

@@ -236,7 +236,7 @@ When you edit `RULES.md`, keep `DIGEST.md` in step. It is a manual condensation,
 
 ## Session flow
 
-Identity and rules loading is verified live by a judge. Work near the context limit is handed to a fresh, verified successor. Nothing is persisted between sessions except the project memory below.
+Identity and rules loading is verified live by a judge. Work near the context limit is handed to a fresh, verified successor. Between sessions, only the project memory and the project journal below persist.
 
 - **Master** (`master.sh`). A neutral judge spawned on demand with `claude -p` and the identity hook disabled, so it does not judge itself. Ground truth is the resolved `~/.claude/CLAUDE.md`, plus the briefing for the project phases. Three phases: `identity` (did the subject load the identity and rules), `project` (did it understand the briefed work), `trajectory` (is a finished turn still on the briefed track). Verdict is strict JSON. Anything unparseable fails.
 - **Cold start** (`ag claude`). The launcher runs the identity self-report as turn 1 of a fresh session and has the master judge it before handing over the seat. On failure it repairs the identity symlink and rerolls, up to `LEX_CLAUDE_SUCCESSION_MAX` times, then launches anyway with a warning. A pass is cached per fingerprint of what the session loads: the identity file, the project `CLAUDE.md` chain, the hook wiring in `settings.json`, the deployed lex-claude commit, the claude binary, the lang file and the launch flags. While the fingerprint is unchanged and younger than `LEX_CLAUDE_COLDSTART_TTL_HOURS`, the seat opens without the check (~1 s instead of ~26 s, measured on Claude Code 2.1.292). `--verify` forces the check, `--fast` skips it. Each launch appends its outcome (`hit`, `fast`, `pass`, `fail`, `unverified`) to `state/coldstart/log`. Skip with `LEX_CLAUDE_COLDSTART_DISABLE=1`.
@@ -264,6 +264,20 @@ The judgment (what is durable, what is superseded) is written by the live Claude
 - **Recall (`etat.sh`, SessionStart):** appends `memory.py recall <slug>`, a fast pure-ranking read (no model, no embeddings) of the live items, grouped by type.
 
 State: `~/.claude/lex-claude/state/<slug>/memory.jsonl` (one JSON item per line). Stdlib only, no model spawned, no embeddings. Kill switch: `LEX_CLAUDE_MEMORY_DISABLE=1` (and `LEX_CLAUDE_DISABLE=1` also stops it). The design and its validation (why forget-by-use plus recoverable supersession beats keep-all and LRU, and why the read-time variant failed) live in `~/Documents/magiclex/elastic-substrat/HANDOFF.md`.
+
+## Project journal (work state, per project)
+
+`memory.py` keeps durable facts and refuses work state. The journal holds the work state: what is in flight, next, waiting, broken, found, and what each session did. It lives in the project folder, `<project>/_journal/`, so it travels with the project (synced folder, other machine) and only that project's sessions load it.
+
+| File | Content | Rule |
+|---|---|---|
+| `STATUS.md` | Now, Next, Waiting on, Issues, Recent results, Last sessions | rewritten, capped at `LEX_CLAUDE_JOURNAL_LINES` (default 120) |
+| `RESULTS.md` | one entry per result: value, method, code, runs, evidence, status | append-only |
+| `sessions/<date>_<identity>_<id8>.md` | one note per session, with the transcript id | written at close or handoff |
+
+- **Load:** `journal.sh start`, its own SessionStart hook. Inside a journaled project (nearest ancestor with `_journal/STATUS.md`) it injects STATUS.md, cut at the cap with a notice, the names of the last three session notes, and one line pointing at `_journal/README.md`. Anywhere else it prints nothing.
+- **Write:** `/ag-close` and `/ag-succession` write the session note, append results and rewrite STATUS when a journal exists. The succession briefing then carries only what STATUS does not. The injected line asks for STATUS updates at task boundaries, so a session that dies loses little.
+- **Commands:** `ag journal init [dir]` (from `templates/journal/`; new workspace projects get one from `new_item.sh`), `show`, `check` (cap, last update, results without evidence), `all` (one line per journaled project in the workspace), `root`.
 
 ## Skills included
 
@@ -305,6 +319,8 @@ lex-claude/
 ├── master.sh                    ← drift authority: judges identity/rules/project load
 ├── succeed.sh                   ← Stop-hook token trigger + successor watch + succession reroll loop
 ├── memory.py                    ← persistent project memory: forget-by-use + write-time supersession
+├── journal.sh                   ← per-project work journal (<project>/_journal/): SessionStart load, ag journal
+├── templates/journal/           ← STATUS.md, RESULTS.md, README.md copied by ag journal init
 ├── watch.sh                     ← SessionStart watchPaths + FileChanged staleness nudge
 ├── direct.sh                    ← UserPromptSubmit: runs `ag <args>` prompts without the model
 ├── digest.sh                    ← UserPromptSubmit rules-digest re-injection

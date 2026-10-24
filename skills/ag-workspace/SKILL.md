@@ -9,7 +9,7 @@ The workspace root is `$AG_WORKSPACE` (default `~/Documents/work_space`). Every 
 
 | Level | Folder | Holds |
 |---|---|---|
-| Projects | `projects_active/<NAME>` | Funded or running work. Template `template_project` |
+| Projects | `projects_active/<NAME>` | Funded or running work. Template `template_project`; `_journal/` added by `ag journal init` |
 | Proposals | `proposals_active/<YYYY>_<CALL-OR-NAME>` | Applications for funding in preparation. Template `template_proposal` |
 | Shared spaces | `cross_sync_active/<PROJECT>` | Folders synced with partners (WPs, deliverables, correspondence, public, www) |
 | Areas | `areas_active/<area>` | Ongoing duties without an end date (expertise, reviewing) |

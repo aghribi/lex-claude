@@ -96,6 +96,7 @@ Usage:
   lex-claude init claude                             Print the context the SessionStart hook loads into Claude Code.
   lex-claude rag <command> [args...]                 Run the ag-rag indexer (search, stats, update, index, embed, init). See 'ag rag --help'.
   lex-claude usage                                   Report which commands/skills get used (and which never do). Debloat aid.
+  lex-claude journal init|show|check|all|root        Per-project journal in <project>/_journal/ (STATUS, RESULTS, session notes). Injected at SessionStart only inside that project.
   lex-claude doctor             Sanity-check the install.
   lex-claude version            Print install version (commit count + date).
 
@@ -153,6 +154,7 @@ wire_hook() {
   local dicmd="bash $INSTALL_DIR/direct.sh"
   local scmd="bash $INSTALL_DIR/style.sh"
   local sucmd="bash $INSTALL_DIR/succeed.sh"
+  local jcmd="bash $INSTALL_DIR/journal.sh start"
   if ! command -v jq >/dev/null 2>&1; then
     echo "warn: jq missing. add hook manually to $SETTINGS (command: $cmd)"
     return 0
@@ -173,16 +175,17 @@ wire_hook() {
   cp "$SETTINGS" "$bak" 2>/dev/null || true
 
   local out; out=$(mktemp 2>/dev/null) || out="/tmp/ag-settings-out.$$"
-  if jq --arg cmd "$cmd" --arg wcmd "$wcmd" --arg ucmd "$ucmd" --arg dcmd "$dcmd" --arg dicmd "$dicmd" --arg scmd "$scmd" --arg sucmd "$sucmd" '
+  if jq --arg cmd "$cmd" --arg wcmd "$wcmd" --arg ucmd "$ucmd" --arg dcmd "$dcmd" --arg dicmd "$dicmd" --arg scmd "$scmd" --arg sucmd "$sucmd" --arg jcmd "$jcmd" '
     .hooks //= {} |
     .hooks.SessionStart //= [] |
     .hooks.SessionStart = [
       .hooks.SessionStart[]
-      | select(all(.hooks[]?; (.command // "") | (test("JeanJean") or test("lex-claude/hook") or test("lex-claude/watch")) | not))
+      | select(all(.hooks[]?; (.command // "") | (test("JeanJean") or test("lex-claude/hook") or test("lex-claude/watch") or test("lex-claude/journal")) | not))
     ] |
     .hooks.SessionStart += [
       {"hooks":[{"type":"command","command":$cmd}]},
-      {"hooks":[{"type":"command","command":$wcmd}]}
+      {"hooks":[{"type":"command","command":$wcmd}]},
+      {"hooks":[{"type":"command","command":$jcmd}]}
     ] |
     .hooks.FileChanged //= [] |
     .hooks.FileChanged = [
@@ -1704,6 +1707,7 @@ case "${1:-}" in
   doctor)       shift; cmd_doctor "$@" ;;
   rag)          shift; cmd_rag "$@" ;;
   usage)        shift; cmd_usage "$@" ;;
+  journal)      shift; bash "$INSTALL_DIR/journal.sh" "$@" ;;
   version|-v|--version) cmd_version ;;
   -h|-help|--help|help|"") usage ;;
   *) usage; exit 1 ;;

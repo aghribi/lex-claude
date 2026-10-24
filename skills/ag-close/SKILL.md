@@ -4,7 +4,7 @@ description: Close a work slice cleanly. Verify commit/push state, check docs ar
 disable-model-invocation: true
 ---
 
-Closing a slice by hand. Three steps.
+Closing a slice by hand. Four steps.
 
 1. **Commit check.** `git status` + `git log origin/HEAD..HEAD --oneline`. If work
    from this session is uncommitted or unpushed, say so and propose the
@@ -14,7 +14,14 @@ Closing a slice by hand. Three steps.
    `docs/` or the README describe? If yes, update them now, same breath. If
    nothing applies, skip silently.
 
-3. **Update project memory (narrow, repo-specific, anti-stale).** You are the
+3. **Project journal, only if one exists** (`bash ~/.claude/lex-claude/journal.sh root`
+   prints its project; no output = skip this step). Format: `_journal/README.md`.
+   Write `sessions/<YYYY-MM-DD>_<identity>_<first 8 of session id>.md`, add new
+   results to `RESULTS.md` with their evidence, then rewrite `STATUS.md` (Updated
+   line, Now, Next, Waiting on, Issues, Recent results, last five sessions).
+   Finish with `journal.sh check`.
+
+4. **Update project memory (narrow, repo-specific, anti-stale).** You are the
    live session with full context, so you judge the delta; `memory.py` only does
    the deterministic bookkeeping (dedup, soft-supersede, decay, cap, persist).
 

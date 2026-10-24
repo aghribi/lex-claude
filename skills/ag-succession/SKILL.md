@@ -35,6 +35,12 @@ Steps, in order:
      from git; any trap (server-side state, a pending choice, a gotcha). Keep it
      to what a fresh agent needs to continue without re-deriving. Do not restate
      rules/identity — the successor loads those and the master verifies them.
+   - **Project journal, only if one exists** (`bash ~/.claude/lex-claude/journal.sh root`
+     prints its project; no output = skip). Before step 3, write this session's note
+     in `_journal/sessions/`, add results to `RESULTS.md`, rewrite `STATUS.md`
+     (format: `_journal/README.md`). The successor reads STATUS at its start, so the
+     briefing carries only what STATUS does not: the exact state of the task in
+     flight and its traps.
 
 3. **Run the succession.**
    - Clean start: `bash ~/.claude/lex-claude/succeed.sh run --open`
