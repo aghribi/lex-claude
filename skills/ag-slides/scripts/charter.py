@@ -57,28 +57,62 @@ def save_reference(p, path):
     p.save(path)
 
 
+def set_text_color(el, hex_):
+    """Every solid text fill of a shape becomes hex_; a shape that inherits its colour gets one at its first level."""
+    fills = list(el.iterfind(".//a:solidFill", NS))
+    if not fills:
+        a = lambda tag: f"{{{NS['a']}}}{tag}"
+        body = el.find(".//p:txBody", NS)
+        lst = body.find("a:lstStyle", NS)
+        if lst is None:
+            lst = body.makeelement(a("lstStyle"), {})
+            body.insert(1, lst)  # after bodyPr
+        lvl = lst.find("a:lvl1pPr", NS)
+        if lvl is None:
+            lvl = lst.makeelement(a("lvl1pPr"), {})
+            lst.insert(0, lvl)
+        rpr = lvl.find("a:defRPr", NS)
+        if rpr is None:
+            rpr = lvl.makeelement(a("defRPr"), {})
+            lvl.append(rpr)
+        fills = [rpr.makeelement(a("solidFill"), {})]
+        rpr.insert(1 if rpr.find("a:ln", NS) is not None else 0, fills[0])
+    for sf in fills:
+        sf.clear()
+        sf.append(sf.makeelement(f"{{{NS['a']}}}srgbClr", {"val": hex_}))
+
+
 def restyle(p, layouts, cfg, brand):
-    """charter.yml `restyle:` edits layouts of a template copy: remove shapes, resize placeholders, recolour text,
-    fade pictures, add bars.
+    """charter.yml `master:` and `restyle:` edit a template copy: master body text colour; per layout background,
+    shape removal, placeholder width, text colour, picture opacity, added bars.
     Bars are drawn on a scratch slide and moved into the layout: python-pptx cannot add shapes to a layout."""
     col = colors(brand)
+    master = cfg.get("master") or {}
+    if "body_color" in master:
+        for sf in p.slide_masters[0]._element.iterfind(".//p:txStyles/p:bodyStyle//a:solidFill", NS):
+            sf.clear()
+            sf.append(sf.makeelement(f"{{{NS['a']}}}srgbClr", {"val": col[master["body_color"]]}))
     for r in cfg.get("restyle") or []:
         lay = layouts[r["layout"]]
         byname = {s.name: s for s in lay.shapes}
+        if "background" in r:
+            lay.background.fill.solid()
+            lay.background.fill.fore_color.rgb = RGBColor.from_string(col[r["background"]])
         for name in r.get("remove", []):
             byname[name]._element.getparent().remove(byname[name]._element)
         for name, w in (r.get("width") or {}).items():
             byname[name].width = Pt(w)
-        for name, c in (r.get("color") or {}).items():  # text colour, e.g. a footer drawn white for a removed band
-            for sf in byname[name]._element.iterfind(".//a:solidFill", NS):
-                sf.clear()
-                sf.append(sf.makeelement(f"{{{NS['a']}}}srgbClr", {"val": col[c]}))
+        for name, c in (r.get("color") or {}).items():
+            set_text_color(byname[name]._element, col[c])
         for name, opacity in (r.get("fade") or {}).items():
             blip = byname[name]._element.find(".//a:blip", NS)
             blip.append(blip.makeelement(f"{{{NS['a']}}}alphaModFix", {"amt": str(int(opacity * 1000))}))
         for bar in r.get("add", []):
             tmp = p.slides.add_slide(lay)
-            shp = tmp.shapes.add_shape(MSO_SHAPE.RECTANGLE, *(Pt(bar[k]) for k in ("x", "y", "w", "h")))
+            kind = MSO_SHAPE.ROUNDED_RECTANGLE if bar.get("radius") else MSO_SHAPE.RECTANGLE
+            shp = tmp.shapes.add_shape(kind, *(Pt(bar[k]) for k in ("x", "y", "w", "h")))
+            if bar.get("radius"):
+                shp.adjustments[0] = bar["radius"] / min(bar["w"], bar["h"])
             shp.line.fill.background()
             shp.shadow.inherit = False
             stops = [RGBColor.from_string(col[c]) for c in bar["fill"]]
@@ -259,14 +293,16 @@ def write_beamer(cfg, brand, geo, out):
          # title page: template title slide, text placed in its title and subtitle boxes
          "\\setbeamertemplate{title page}{\\begin{tikzpicture}[remember picture,overlay,x=\\paperwidth,y=-\\paperheight,shift={(current page.north west)}]",
          f"  \\node[anchor=south west,inner sep=0,text width={t['title']['w']*k:.1f}pt,font=\\brandhead\\fontsize{{{t['title'].get('size',54)*k:.1f}}}{{{t['title'].get('size',54)*k:.1f}}}\\selectfont,text=brandTitle] at ({frac(t['title']['x'],W)},{frac(t['title']['y']+t['title']['h'],H)}) {{\\inserttitle}};",
-         f"  \\node[anchor=north west,inner sep=0,text width={t['body']['w']*k:.1f}pt,font=\\fontsize{{{t['body'].get('size',24)*k:.1f}}}{{{t['body'].get('size',24)*k*1.2:.1f}}}\\selectfont,text=brandBackground,align=left] at ({frac(t['body']['x'],W)},{frac(t['body']['y'],H)}) {{\\insertsubtitle\\\\[2pt]\\insertauthor\\\\\\insertinstitute}};",
+         f"  \\node[anchor=north west,inner sep=0,text width={t['body']['w']*k:.1f}pt,font=\\fontsize{{{t['body'].get('size',24)*k:.1f}}}{{{t['body'].get('size',24)*k*1.2:.1f}}}\\selectfont,text=brandSubtitle,align=left] at ({frac(t['body']['x'],W)},{frac(t['body']['y'],H)}) {{\\insertsubtitle\\\\[2pt]\\insertauthor\\\\\\insertinstitute}};",
          "\\end{tikzpicture}}",
          # section divider: template section layout
          "\\AtBeginSection{{\\setbeamertemplate{background}{\\brandbg{\\brandbgdir/section.pdf}}\\begin{frame}\\begin{tikzpicture}[remember picture,overlay,x=\\paperwidth,y=-\\paperheight,shift={(current page.north west)}]",
-         f"  \\node[anchor=south west,inner sep=0,text width={s['title']['w']*k:.1f}pt,font=\\brandhead\\fontsize{{{s['title'].get('size',60)*k:.1f}}}{{{s['title'].get('size',60)*k:.1f}}}\\selectfont,text=brandForeground] at ({frac(s['title']['x'],W)},{frac(s['title']['y']+s['title']['h'],H)}) {{\\insertsection}};",
+         f"  \\node[anchor=south west,inner sep=0,text width={s['title']['w']*k:.1f}pt,font=\\brandhead\\fontsize{{{s['title'].get('size',60)*k:.1f}}}{{{s['title'].get('size',60)*k:.1f}}}\\selectfont,text=brandSection] at ({frac(s['title']['x'],W)},{frac(s['title']['y']+s['title']['h'],H)}) {{\\insertsection}};",
          "\\end{tikzpicture}\\end{frame}}}",
          ]
     L.insert(3, f"\\definecolor{{brandTitle}}{{HTML}}{{{t['title'].get('color') or col['foreground']}}}")
+    L.insert(3, f"\\definecolor{{brandSubtitle}}{{HTML}}{{{t['body'].get('color') or col['background']}}}")
+    L.insert(3, f"\\definecolor{{brandSection}}{{HTML}}{{{s['title'].get('color') or col['primary']}}}")
     (out / "beamerthemecharter.sty").write_text("\n".join(L) + "\n")
 
 
@@ -284,8 +320,12 @@ def write_scss(cfg, brand, geo, out):
     foot = lambda pos, cls, extra="": (f".reveal .brand-foot .{cls} {{ left: {px(c[pos]['x'])}; top: {px(c[pos]['y'])}; width: {px(c[pos]['w'])}; height: {px(c[pos]['h'])}; {extra} }}"
                                         if pos in c else f".reveal .brand-foot .{cls} {{ display: none; }}")
     ref = c.get("center") or c.get("right") or {}
+    # Google faces from _brand.yml load in the browser; LaTeX and PowerPoint use their own fallbacks
+    google = [f for f in brand.get("typography", {}).get("fonts", []) if f.get("source") == "google"]
+    fonts = "&".join(f"family={f['family'].replace(' ', '+')}" + (f":wght@{';'.join(map(str, sorted(f['weight'])))}" if f.get("weight") else "") for f in google)
     css = f"""/*-- scss:defaults --*/
 // Generated by ag-slides charter.py from the {cfg['name']} template. Edit the charter, then rebuild.
+{f"@import url('https://fonts.googleapis.com/css2?{fonts}&display=swap');" if google else ""}
 {chr(10).join(f'$brand-{n}: #{v};' for n, v in col.items())}
 $body-bg: #{col['background']};
 $body-color: #{col['foreground']};
@@ -300,9 +340,9 @@ $presentation-font-size-root: {px(geo['body_size'] * 0.8)};
 /*-- scss:rules --*/
 .reveal .slides section.slide.level2 > h2 {{ {box(c['title'])} display: flex; align-items: flex-end; font-size: {px(geo['title_size'])}; line-height: 0.9; }}
 .reveal .slides section.slide.level2 {{ padding-top: {px(c['body']['y'])} !important; padding-left: {px(c['body']['x'])}; padding-right: {px(W - c['body']['x'] - c['body']['w'])}; box-sizing: border-box; height: 100%; }}
-.reveal .slides section.title-slide.level1 > h1 {{ {box(s['title'])} display: flex; align-items: flex-end; font-size: {px(s['title'].get('size', 60))}; }}
+.reveal .slides section.title-slide.level1 > h1 {{ {box(s['title'])} display: flex; align-items: flex-end; font-size: {px(s['title'].get('size', 60))}; color: #{s['title'].get('color') or col['primary']}; }}
 #title-slide .title {{ {box(t['title'])} display: flex; align-items: flex-end; font-size: {px(t['title'].get('size', 54))}; color: #{t['title'].get('color') or col['foreground']}; text-align: left; }}
-#title-slide .subtitle, #title-slide .quarto-title-authors {{ color: #{col['background']}; text-align: left; font-size: {px(t['body'].get('size', 24))}; }}
+#title-slide .subtitle, #title-slide .quarto-title-authors {{ color: #{t['body'].get('color') or col['background']}; text-align: left; font-size: {px(t['body'].get('size', 24))}; }}
 #title-slide .quarto-title-block-meta, #title-slide .subtitle {{ position: absolute; left: {pc(t['body']['x'], W)}; width: {pc(t['body']['w'], W)}; }}
 #title-slide .subtitle {{ top: {pc(t['body']['y'], H)}; }}
 #title-slide .quarto-title-authors {{ position: absolute; left: {pc(t['body']['x'], W)}; top: calc({pc(t['body']['y'], H)} + 1.4em); justify-content: flex-start; }}
