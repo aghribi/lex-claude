@@ -1,0 +1,207 @@
+-- ag-slides charter filter, shipped inside each charter's Quarto extension.
+-- revealjs: template backgrounds on the title slide, section slides (#), content slides (##) and {.plain} slides,
+--           and the template footer inside every slide.
+-- beamer: loads the charter theme from the extension and passes it the deck footer.
+
+local bg = quarto.utils.resolve_path("backgrounds")
+-- revealjs: path relative to the project, mirrored into build/ by the deck's `resources:`
+local bg_rel = bg:match("(_extensions/.*)$") or bg
+-- "contain", not "cover": reveal letterboxes the 16:9 slide in the window, and the background must sit in the same box
+-- (with "cover" a 16:10 screen crops the template's sides, logo included)
+
+local footer = ""
+
+local function role_of(h)
+  if h.classes:includes("plain") then return "plain" end
+  if h.level == 1 then return "section" end
+  if h.level == 2 then return "content" end
+end
+
+function Meta(meta)
+  footer = meta.footer and pandoc.utils.stringify(meta.footer) or ""
+  if quarto.doc.is_format("revealjs") then
+    local attrs = meta["title-slide-attributes"] or {}
+    attrs["data-background-image"] = attrs["data-background-image"] or (bg_rel .. "/title.png")
+    attrs["data-background-size"] = attrs["data-background-size"] or "contain"
+    meta["title-slide-attributes"] = attrs
+  elseif quarto.doc.is_format("beamer") then
+    quarto.doc.include_text("in-header", table.concat({
+      "\\def\\brandbgdir{" .. bg .. "}",
+      "\\usepackage{" .. quarto.utils.resolve_path("beamerthemecharter") .. "}",
+      "\\renewcommand\\brandfooter{" .. footer .. "}",
+    }, "\n"))
+  end
+  return meta
+end
+
+function Header(h)
+  if not quarto.doc.is_format("revealjs") or h.attributes["background-image"] then return nil end
+  local role = role_of(h)
+  if role then
+    h.attributes["background-image"] = bg_rel .. "/" .. role .. ".png"
+    h.attributes["background-size"] = "contain"
+  end
+  return h
+end
+
+-- components (components.scss): .tiles > .tile, .cards > .card, .steps > .step, .timeline over a list.
+-- revealjs: entrance animation index per child; `.build` turns the children into fragments.
+-- pptx and beamer have no grid: tiles, cards and steps become a list, the timeline two tables in columns.
+local GRIDS = { tiles = true, cards = true, steps = true }
+
+local function grid_kind(div)
+  for _, c in ipairs(div.classes) do
+    if GRIDS[c] then return c end
+  end
+end
+
+local function html_esc(s)
+  return (s:gsub("&", "&amp;"):gsub("<", "&lt;"):gsub(">", "&gt;"))
+end
+
+-- `- M8 D2.1 Accelerator measurement procedures (CERN)`: month, id, title; ids starting with MS are milestones
+local function timeline_events(div)
+  local evs = {}
+  for _, b in ipairs(div.content) do
+    if b.t == "BulletList" then
+      for _, item in ipairs(b.content) do
+        local txt = pandoc.utils.stringify(item)
+        local m, id, title = txt:match("^M(%d+)%s+(%S+)%s+(.*)$")
+        if not m then error("timeline item must read `M<month> <id> <title>`: " .. txt) end
+        evs[#evs + 1] = { m = tonumber(m), id = id, title = title, ms = id:match("^MS") ~= nil }
+      end
+    end
+  end
+  table.sort(evs, function(a, b) return a.m < b.m end)
+  return evs
+end
+
+local function timeline_html(div, evs)
+  local months = tonumber(div.attributes.months) or evs[#evs].m
+  -- label width in months: deliverables above the axis, milestones below
+  local spans = { up = tonumber(div.attributes["label-up"]) or months / 4, down = tonumber(div.attributes["label-down"]) or months / 6 }
+  local out = { '<div class="timeline"><div class="axis"></div>' }
+  for t = 0, months, 12 do
+    out[#out + 1] = string.format('<span class="tick" style="left:%.2f%%">M%d</span>', 100 * t / months, t)
+  end
+  if div.attributes.now then
+    local n = tonumber(div.attributes.now)
+    out[#out + 1] = string.format('<div class="now" style="left:%.2f%%"><span>M%d, today</span></div>', 100 * n / months, n)
+  end
+  -- each label runs right or left of its event, whichever sits closer to the axis without overlapping
+  -- a label already placed on the same side; levels stack away from the axis
+  local ends, stems = { up = {}, down = {} }, {}
+  local function level_for(side, a)
+    local l = 0
+    while ends[side][l] and a < ends[side][l] do l = l + 1 end
+    return l
+  end
+  for i, e in ipairs(evs) do
+    local side = e.ms and "down" or "up"
+    local span = spans[side]
+    local best
+    for _, late in ipairs({ false, true }) do
+      local a, b = late and e.m - span or e.m, late and e.m or e.m + span
+      if a >= 0 and b <= months then
+        local l = level_for(side, a)
+        if not best or l < best.l then best = { l = l, b = b, late = late } end
+      end
+    end
+    ends[side][best.l] = best.b
+    local pos = string.format('left:%.2f%%;height:%dpx;--i:%d', 100 * e.m / months, 40 + 95 * best.l, i)
+    stems[#stems + 1] = string.format('<div class="stem %s" style="%s"></div>', side, pos)
+    out[#out + 1] = string.format('<div class="ev %s%s" style="%s;--w:%.2f"><div class="lbl"><b>%s</b><i>M%d</i><br>%s</div></div>',
+      side, best.late and " late" or "", pos, 100 * span / months, html_esc(e.id), e.m, html_esc(e.title))
+  end
+  -- stems first: every label paints over every stem
+  table.insert(out, 2, table.concat(stems))
+  out[#out + 1] = "</div>"
+  return pandoc.RawBlock("html", table.concat(out))
+end
+
+-- one list item per child: first paragraph in bold, then the rest of the text
+local function grid_list(div, kind)
+  local items = {}
+  for _, child in ipairs(div.content) do
+    if child.t == "Div" then
+      local inl = pandoc.Inlines({})
+      for j, b in ipairs(child.content) do
+        if b.content then
+          local part = pandoc.Inlines(b.content)
+          if j == 1 then
+            part = pandoc.Inlines({ pandoc.Strong(part) })
+          else
+            if j == 2 and kind ~= "tiles" then inl:insert(pandoc.Str(":")) end
+            inl:insert(pandoc.Space())
+          end
+          inl:extend(part)
+        end
+      end
+      items[#items + 1] = { pandoc.Plain(inl) }
+    end
+  end
+  return pandoc.BulletList(items)
+end
+
+-- pptx and beamer: two tables side by side, deliverables and milestones; pandoc sets tables in small type
+local function timeline_columns(evs)
+  local cols = {}
+  for _, ms in ipairs({ false, true }) do
+    local rows = {}
+    for _, e in ipairs(evs) do
+      if e.ms == ms then
+        rows[#rows + 1] = { { pandoc.Plain({ pandoc.Strong(e.id), pandoc.Space(), pandoc.Str(e.title) }) }, { pandoc.Plain({ pandoc.Str("M" .. e.m) }) } }
+      end
+    end
+    local head = { { pandoc.Plain({ pandoc.Str(ms and "Milestone" or "Deliverable") }) }, { pandoc.Plain({ pandoc.Str("Month") }) } }
+    local tbl = pandoc.utils.from_simple_table(pandoc.SimpleTable({}, { pandoc.AlignLeft, pandoc.AlignRight }, { 0, 0 }, head, rows))
+    cols[#cols + 1] = pandoc.Div({ tbl }, pandoc.Attr("", { "column" }, { width = "50%" }))
+  end
+  return pandoc.Div(cols, pandoc.Attr("", { "columns" }))
+end
+
+function Div(div)
+  local reveal = quarto.doc.is_format("revealjs")
+  if div.classes:includes("timeline") then
+    local evs = timeline_events(div)
+    return reveal and timeline_html(div, evs) or timeline_columns(evs)
+  end
+  local kind = grid_kind(div)
+  if not kind then return nil end
+  if not reveal then return grid_list(div, kind) end
+  local build = div.classes:includes("build")
+  if not build then div.classes:insert("comp-anim") end
+  local i = 0
+  for _, child in ipairs(div.content) do
+    if child.t == "Div" then
+      child.attributes.style = "--i:" .. i
+      if build then child.classes:insert("fragment") end
+      i = i + 1
+    end
+  end
+  return div
+end
+
+-- revealjs: close every slide with the footer; a block before a slide heading ends the previous slide
+-- numbers are written at build time: reveal hides far slides (display: none) and CSS counters skip them
+local function foot(n)
+  local esc = footer:gsub("&", "&amp;"):gsub("<", "&lt;")
+  return pandoc.RawBlock("html", '<div class="brand-foot"><span class="brand-url"></span><span class="brand-text">' .. esc .. '</span><span class="brand-num">' .. n .. '</span></div>')
+end
+
+function Pandoc(doc)
+  if not quarto.doc.is_format("revealjs") then return nil end
+  local out, n = {}, 1  -- the title slide is number 1, as in the pptx
+  for _, b in ipairs(doc.blocks) do
+    if b.t == "Header" and b.level <= 2 then
+      if n > 1 then out[#out + 1] = foot(n) end
+      n = n + 1
+    end
+    out[#out + 1] = b
+  end
+  if n > 1 then out[#out + 1] = foot(n) end
+  doc.blocks = out
+  return doc
+end
+
+return { { Meta = Meta }, { Header = Header, Div = Div }, { Pandoc = Pandoc } }

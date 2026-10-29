@@ -300,6 +300,7 @@ All custom skills are prefixed `ag-` to avoid drowning in native skills or other
 - `tools/git-state/git-state.sh`: makes every git clone in the workspace restorable from CERNBox, which skips `.git`. Hourly launchd job writes `GIT_STATE.md` (remote, branch, HEAD, restore commands), `GIT_STATE.patch` (uncommitted changes) and `GIT_STATE.bundle` (unpushed commits) at each repo root, only on change; the names are in the global git excludes; partner-synced spaces are skipped. Install: `tools/git-state/git-state.sh --install` (approve Documents access for GitState.app on first run).
 - `ag-rag`: local hybrid search (FTS5 + bge-m3 via Ollama, sqlite-vec) over work documents, with a read-only MCP server. Code in `tools/ag-rag/ag_rag.py`.
 - `ag-train`: hands-on quests in a sandbox (`scripts/sandbox.sh`, `scripts/check.sh`), paired with the Betatron Training Line web game.
+- `ag-slides`: one Quarto `slides.qmd` rendered to pptx, Beamer and revealjs in a project charter built from the project's own pptx template (`scripts/charter.py`). Components (tiles, cards, steps, timeline) with revealjs animations and static pptx/beamer fallbacks, a deck lint (`check_deck.py`) and a three-format contact sheet (`compare.py`).
 - `ag-voice`: write in the user's voice. One DNA (physics does the arguing, causal chains, candid on setbacks, parentheses for precision), four registers: paper, EU proposal, French institutional, email. Calibrated on the user's corpus (`Voice.md`), which stays on their machine.
 
 ### Vendored science skills

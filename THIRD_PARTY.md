@@ -7,6 +7,7 @@ Vendored skills are copied by `vendor.sh` at the pinned commits below, then patc
 | [K-Dense-AI/scientific-agent-skills](https://github.com/K-Dense-AI/scientific-agent-skills) | `a1043ef` | MIT | scientific-critical-thinking, hypothesis-generation, scientific-brainstorming, experimental-design, statistical-analysis, uncertainty-and-units, literature-review, citation-management, paper-lookup, scientific-writing, peer-review, scientific-visualization, stable-baselines3, pufferlib, pymoo, pytorch-lightning, scikit-learn, shap, pymc |
 | [flonat/flonat-research](https://github.com/flonat/flonat-research) | `da27600` | MIT | devils-advocate, numerical-check, verify-math, computational-experiments, review-response, proofread |
 | [obra/superpowers](https://github.com/obra/superpowers) | `bb92a77` | MIT | systematic-debugging, verification-before-completion |
+| [quarto-ext/pointer](https://github.com/quarto-ext/pointer) | `61e8b1a` (v0.1.0, `pointer.js` identical) | MIT | ag-slides (`scripts/vendor/pointer`, revealjs pointer plugin, `plugin.yml` added) |
 
 ## Patches
 
