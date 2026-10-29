@@ -15,7 +15,9 @@ that Beamer and revealjs use, and its placeholder geometry sets where titles, bo
 import argparse, pathlib, re, shutil, subprocess, sys
 import yaml
 from pptx import Presentation
-from pptx.enum.shapes import PP_PLACEHOLDER
+from pptx.dml.color import RGBColor
+from pptx.enum.shapes import MSO_SHAPE, PP_PLACEHOLDER
+from pptx.util import Pt
 
 HERE = pathlib.Path(__file__).resolve().parent
 NS = {"a": "http://schemas.openxmlformats.org/drawingml/2006/main", "p": "http://schemas.openxmlformats.org/presentationml/2006/main"}
@@ -34,7 +36,65 @@ def load(cdir):
     return cfg, brand
 
 
-def open_template(cdir, cfg):
+def drop_slides(p):
+    for sldId in list(p.slides._sldIdLst):
+        p.part.drop_rel(sldId.rId)
+        p.slides._sldIdLst.remove(sldId)
+
+
+# presentation-level parts pandoc copies from a reference doc; it keeps the reference's rels file but drops
+# every other part (customXml, handout master, revision and author logs, Google metadata), and PowerPoint
+# then refuses to open the deck
+PANDOC_KEEPS = ("/slide", "/slideMaster", "/notesMaster", "/theme", "/presProps", "/viewProps", "/tableStyles", "/font")
+
+
+def save_reference(p, path):
+    for rId, rel in list(p.part.rels.items()):
+        if not rel.reltype.endswith(PANDOC_KEEPS):
+            p.part.drop_rel(rId)
+    for el in p.part._element.findall("p:handoutMasterIdLst", NS):
+        p.part._element.remove(el)
+    p.save(path)
+
+
+def restyle(p, layouts, cfg, brand):
+    """charter.yml `restyle:` edits layouts of a template copy: remove shapes, resize placeholders, recolour text,
+    fade pictures, add bars.
+    Bars are drawn on a scratch slide and moved into the layout: python-pptx cannot add shapes to a layout."""
+    col = colors(brand)
+    for r in cfg.get("restyle") or []:
+        lay = layouts[r["layout"]]
+        byname = {s.name: s for s in lay.shapes}
+        for name in r.get("remove", []):
+            byname[name]._element.getparent().remove(byname[name]._element)
+        for name, w in (r.get("width") or {}).items():
+            byname[name].width = Pt(w)
+        for name, c in (r.get("color") or {}).items():  # text colour, e.g. a footer drawn white for a removed band
+            for sf in byname[name]._element.iterfind(".//a:solidFill", NS):
+                sf.clear()
+                sf.append(sf.makeelement(f"{{{NS['a']}}}srgbClr", {"val": col[c]}))
+        for name, opacity in (r.get("fade") or {}).items():
+            blip = byname[name]._element.find(".//a:blip", NS)
+            blip.append(blip.makeelement(f"{{{NS['a']}}}alphaModFix", {"amt": str(int(opacity * 1000))}))
+        for bar in r.get("add", []):
+            tmp = p.slides.add_slide(lay)
+            shp = tmp.shapes.add_shape(MSO_SHAPE.RECTANGLE, *(Pt(bar[k]) for k in ("x", "y", "w", "h")))
+            shp.line.fill.background()
+            shp.shadow.inherit = False
+            stops = [RGBColor.from_string(col[c]) for c in bar["fill"]]
+            if len(stops) == 1:
+                shp.fill.solid()
+                shp.fill.fore_color.rgb = stops[0]
+            else:  # top to bottom
+                shp.fill.gradient()
+                shp.fill.gradient_angle = 90
+                for st, c in zip(shp.fill.gradient_stops, stops):
+                    st.color.rgb = c
+            lay.shapes._spTree.insert(2, shp._element)  # behind the placeholders
+            drop_slides(p)
+
+
+def open_template(cdir, cfg, brand):
     p = Presentation(cdir / cfg["template"])
     layouts = {l.name: l for m in p.slide_masters for l in m.slide_layouts}
     for name, src in (cfg.get("aliases") or {}).items():
@@ -42,9 +102,8 @@ def open_template(cdir, cfg):
             sys.exit(f"alias {name!r}: the template already has a layout with that name")
         layouts[src].name = name
         layouts[name] = layouts.pop(src)
-    for sldId in list(p.slides._sldIdLst):
-        p.part.drop_rel(sldId.rId)
-        p.slides._sldIdLst.remove(sldId)
+    drop_slides(p)
+    restyle(p, layouts, cfg, brand)
     return p, layouts
 
 
@@ -60,9 +119,13 @@ def run_props(el):
     out = {}
     if r.get("sz"):
         out["size"] = int(r.get("sz")) / 100
-    c = r.find(".//a:srgbClr", NS)
+    # text fill only: effects (shadows, glows) carry their own srgbClr
+    c = r.find("a:solidFill/a:srgbClr", NS)
+    s = r.find("a:solidFill/a:schemeClr", NS)
     if c is not None:
         out["color"] = c.get("val")
+    elif s is not None and s.get("val") in ("bg1", "lt1", "tx1", "dk1"):
+        out["color"] = "FFFFFF" if s.get("val") in ("bg1", "lt1") else "000000"
     return out
 
 
@@ -112,9 +175,9 @@ def render_backgrounds(p, layouts, cfg, out):
     (out / "backgrounds.pdf").unlink()
 
 
-def render_layout_sheet(cdir, cfg, out):
+def render_layout_sheet(cdir, cfg, brand, out):
     """Every template layout, labelled with its name, as one contact sheet: layout names lie, pictures do not."""
-    p, layouts = open_template(cdir, cfg)
+    p, layouts = open_template(cdir, cfg, brand)
     for name, lay in layouts.items():
         s = p.slides.add_slide(lay)
         for ph in s.placeholders:
@@ -215,7 +278,9 @@ def write_scss(cfg, brand, geo, out):
     col = colors(brand)
     stack = lambda key: ", ".join(f'"{f}"' for f in font_stack(brand, key, cfg.get("font_fallbacks", {}))) + ", sans-serif"
     c, s, t = geo["content"], geo["section"], geo["title"]
-    box = lambda b: f"position: absolute; left: {pc(b['x'], W)}; top: {pc(b['y'], H)}; width: {pc(b['w'], W)}; height: {pc(b['h'], H)}; margin: 0;"
+    # PowerPoint insets text 7.2 pt left and right, 3.6 pt top and bottom inside a placeholder
+    inset = f"padding: {px(3.6)} {px(7.2)}; box-sizing: border-box;"
+    box = lambda b: f"position: absolute; left: {pc(b['x'], W)}; top: {pc(b['y'], H)}; width: {pc(b['w'], W)}; height: {pc(b['h'], H)}; margin: 0; {inset}"
     foot = lambda pos, cls, extra="": (f".reveal .brand-foot .{cls} {{ left: {px(c[pos]['x'])}; top: {px(c[pos]['y'])}; width: {px(c[pos]['w'])}; height: {px(c[pos]['h'])}; {extra} }}"
                                         if pos in c else f".reveal .brand-foot .{cls} {{ display: none; }}")
     ref = c.get("center") or c.get("right") or {}
@@ -271,7 +336,8 @@ def write_extension(cfg, ext):
             # no embed-resources: Quarto refuses chalkboard in self-contained output (slides.html + slides_files/)
             "revealjs": {"theme": ["default", f"{cfg['name']}.scss", "components.scss"], "width": 1600, "height": 900,
                          "transition": "fade", "transition-speed": "fast", "background-transition": "fade",
-                         "slide-number": False, "center": False, "controls": False,
+                         # margin 0: the slide fills the same letterboxed box as the `contain` background
+                         "slide-number": False, "center": False, "controls": False, "margin": 0,
                          "chalkboard": {"theme": "whiteboard"}, "revealjs-plugins": ["pointer"]},
             "beamer": {"aspectratio": 169, "pdf-engine": "lualatex", "classoption": ["t"]},
         }},
@@ -286,14 +352,14 @@ def build(cdir):
         shutil.rmtree(out)
     ext = out / "_extensions" / cfg["name"]
     ext.mkdir(parents=True)
-    p, layouts = open_template(cdir, cfg)
+    p, layouts = open_template(cdir, cfg, brand)
     missing = [n for n in PANDOC_LAYOUTS if n not in layouts]
     if missing:
         sys.exit(f"pandoc needs these layout names, alias them in charter.yml: {missing}")
     geo = geometry(p, layouts, cfg)
-    p.save(out / "reference-base.pptx")
+    save_reference(p, out / "reference-base.pptx")
     render_backgrounds(p, layouts, cfg, ext / "backgrounds")
-    render_layout_sheet(cdir, cfg, out)
+    render_layout_sheet(cdir, cfg, brand, out)
     write_beamer(cfg, brand, geo, ext)
     write_scss(cfg, brand, geo, ext)
     write_extension(cfg, ext)

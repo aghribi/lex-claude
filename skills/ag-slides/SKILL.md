@@ -41,6 +41,7 @@ Setting up a new charter:
 3. Build, open `build/layouts.pdf`, pick `layouts:` roles from the pictures. Layout names lie (iRIS "Blank-white" is green).
 4. Pandoc needs layouts named `Title Slide, Title and Content, Section Header, Two Content, Comparison, Content with Caption, Blank`; alias missing ones in `charter.yml`.
 5. Fonts only in Office (e.g. Arial Nova Cond) get `font_fallbacks` for LaTeX and browsers; the pptx keeps the real font.
+6. A template that needs a lighter hand: `restyle:` in `charter.yml`, applied at build time to a copy of the template, so the official file stays as issued and all three formats follow. Per layout: `remove` (shape names), `width` (placeholder, pt), `color` (text, palette name; e.g. a footer drawn white for a removed band), `fade` (picture opacity, %), `add` (bars `{x, y, w, h, fill: [colour]}` or a two-colour top-to-bottom gradient). Shape names come from the layout; restyle every layout pandoc uses (Two Content, Comparison, Content with Caption too). Mock up options on a template copy and let the user pick from PowerPoint renders before writing the charter.
 
 ## Deck
 

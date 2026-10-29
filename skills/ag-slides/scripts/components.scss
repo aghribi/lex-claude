@@ -15,6 +15,8 @@ $comp-muted: mix($brand-primary, #ffffff, 60%);
 // content sits centred in the template body box; reveal writes display:none inline on far slides, keep those hidden
 .reveal .slides section.slide.level2:not([style*="display: none"]) { display: flex !important; flex-direction: column; justify-content: center; padding-bottom: 90px; }
 .reveal .slides section.slide.level2 > * { flex: none; }
+// menu and chalkboard stay on their keys (m, c, b); their buttons would sit on the footer
+.reveal .slide-menu-button, .reveal .slide-chalkboard-buttons { display: none !important; }
 .reveal strong { color: $brand-primary; }
 .reveal ul > li::marker { color: $brand-secondary; }
 .reveal ul, .reveal ol { margin-left: 1em; }
