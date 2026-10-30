@@ -24,6 +24,7 @@ NS = {"a": "http://schemas.openxmlformats.org/drawingml/2006/main", "p": "http:/
 ROLES = ("title", "section", "content", "plain")
 # layouts pandoc looks up by name in a reference doc
 PANDOC_LAYOUTS = ("Title Slide", "Title and Content", "Section Header", "Two Content", "Comparison", "Content with Caption", "Blank")
+JUSTIFY = {"l": "flex-start", "ctr": "center", "r": "flex-end", "just": "flex-start", "dist": "flex-start"}
 FOOTER_TYPES = {PP_PLACEHOLDER.DATE: "left", PP_PLACEHOLDER.FOOTER: "center", PP_PLACEHOLDER.SLIDE_NUMBER: "right"}
 
 
@@ -57,20 +58,27 @@ def save_reference(p, path):
     p.save(path)
 
 
+def first_level(el):
+    """The shape's lstStyle/lvl1pPr, created when missing."""
+    a = lambda tag: f"{{{NS['a']}}}{tag}"
+    body = el.find(".//p:txBody", NS)
+    lst = body.find("a:lstStyle", NS)
+    if lst is None:
+        lst = body.makeelement(a("lstStyle"), {})
+        body.insert(1, lst)  # after bodyPr
+    lvl = lst.find("a:lvl1pPr", NS)
+    if lvl is None:
+        lvl = lst.makeelement(a("lvl1pPr"), {})
+        lst.insert(0, lvl)
+    return lvl
+
+
 def set_text_color(el, hex_):
     """Every solid text fill of a shape becomes hex_; a shape that inherits its colour gets one at its first level."""
     fills = list(el.iterfind(".//a:solidFill", NS))
     if not fills:
         a = lambda tag: f"{{{NS['a']}}}{tag}"
-        body = el.find(".//p:txBody", NS)
-        lst = body.find("a:lstStyle", NS)
-        if lst is None:
-            lst = body.makeelement(a("lstStyle"), {})
-            body.insert(1, lst)  # after bodyPr
-        lvl = lst.find("a:lvl1pPr", NS)
-        if lvl is None:
-            lvl = lst.makeelement(a("lvl1pPr"), {})
-            lst.insert(0, lvl)
+        lvl = first_level(el)
         rpr = lvl.find("a:defRPr", NS)
         if rpr is None:
             rpr = lvl.makeelement(a("defRPr"), {})
@@ -84,7 +92,8 @@ def set_text_color(el, hex_):
 
 def restyle(p, layouts, cfg, brand):
     """charter.yml `master:` and `restyle:` edit a template copy: master body text colour; per layout background,
-    shape removal, placeholder width, text colour, picture opacity, added bars.
+    shape removal, placeholder width or box, text colour, font size and weight, alignment, picture opacity,
+    added bars and static text.
     Bars are drawn on a scratch slide and moved into the layout: python-pptx cannot add shapes to a layout."""
     col = colors(brand)
     master = cfg.get("master") or {}
@@ -102,13 +111,43 @@ def restyle(p, layouts, cfg, brand):
             byname[name]._element.getparent().remove(byname[name]._element)
         for name, w in (r.get("width") or {}).items():
             byname[name].width = Pt(w)
+        for name, (x, y, w, h) in (r.get("box") or {}).items():
+            byname[name].left, byname[name].top, byname[name].width, byname[name].height = Pt(x), Pt(y), Pt(w), Pt(h)
+        for name, al in (r.get("align") or {}).items():  # l, ctr, r on the first level of the shape's text
+            first_level(byname[name]._element).set("algn", al)
+            for ppr in byname[name]._element.iterfind(".//a:p/a:pPr", NS):
+                ppr.set("algn", al)
         for name, c in (r.get("color") or {}).items():
             set_text_color(byname[name]._element, col[c])
+        for name, f in (r.get("font") or {}).items():  # {size: pt, bold: bool} on the first level
+            lvl = first_level(byname[name]._element)
+            rpr = lvl.find("a:defRPr", NS)
+            if rpr is None:
+                rpr = lvl.makeelement(f"{{{NS['a']}}}defRPr", {})
+                lvl.append(rpr)
+            if "size" in f:
+                rpr.set("sz", str(int(f["size"] * 100)))
+            if "bold" in f:
+                rpr.set("b", "1" if f["bold"] else "0")
         for name, opacity in (r.get("fade") or {}).items():
             blip = byname[name]._element.find(".//a:blip", NS)
             blip.append(blip.makeelement(f"{{{NS['a']}}}alphaModFix", {"amt": str(int(opacity * 1000))}))
         for bar in r.get("add", []):
             tmp = p.slides.add_slide(lay)
+            if "text" in bar:  # static text, e.g. a funding statement
+                tb = tmp.shapes.add_textbox(*(Pt(bar[k]) for k in ("x", "y", "w", "h")))
+                tf = tb.text_frame
+                tf.word_wrap = True
+                for k in ("margin_left", "margin_right", "margin_top", "margin_bottom"):
+                    setattr(tf, k, 0)
+                run = tf.paragraphs[0].add_run()
+                run.text = bar["text"]
+                run.font.size = Pt(bar.get("size", 10))
+                run.font.bold = bar.get("bold", False)
+                run.font.color.rgb = RGBColor.from_string(col[bar.get("color", "foreground")])
+                lay.shapes._spTree.append(tb._element)
+                drop_slides(p)
+                continue
             kind = MSO_SHAPE.ROUNDED_RECTANGLE if bar.get("radius") else MSO_SHAPE.RECTANGLE
             shp = tmp.shapes.add_shape(kind, *(Pt(bar[k]) for k in ("x", "y", "w", "h")))
             if bar.get("radius"):
@@ -163,6 +202,17 @@ def run_props(el):
     return out
 
 
+def align_of(el):
+    """Paragraph alignment (l, ctr, r) set on a placeholder's first level or first paragraph, else None."""
+    if el is None:
+        return None
+    for path in (".//a:lstStyle/a:lvl1pPr", ".//a:p/a:pPr"):
+        n = el.find(path, NS)
+        if n is not None and n.get("algn"):
+            return n.get("algn")
+    return None
+
+
 def geometry(p, layouts, cfg):
     """Placeholder boxes in points, per role, plus the master text sizes."""
     m = p.slide_masters[0]._element
@@ -175,6 +225,7 @@ def geometry(p, layouts, cfg):
             t = ph.placeholder_format.type
             box = {"x": pt(ph.left), "y": pt(ph.top), "w": pt(ph.width), "h": pt(ph.height)}
             box |= run_props(master_ph[t]._element if t in master_ph else None) | run_props(ph._element)
+            box |= {"align": align_of(ph._element) or align_of(master_ph[t]._element if t in master_ph else None) or {"left": "l", "center": "ctr", "right": "r"}.get(FOOTER_TYPES.get(t), "l")}
             if t in (PP_PLACEHOLDER.TITLE, PP_PLACEHOLDER.CENTER_TITLE):
                 g["title"] = box
             elif t in (PP_PLACEHOLDER.SUBTITLE, PP_PLACEHOLDER.BODY, PP_PLACEHOLDER.OBJECT) and "body" not in g:
@@ -285,14 +336,15 @@ def write_beamer(cfg, brand, geo, out):
          "\\newcommand\\brandbg[1]{\\begin{tikzpicture}[remember picture,overlay]\\node[anchor=north west,inner sep=0] at (current page.north west) {\\includegraphics[width=\\paperwidth,height=\\paperheight]{#1}};\\end{tikzpicture}}",
          "\\newcommand\\brandistitle{\\ifnum\\value{framenumber}=1 \\ifx\\inserttitle\\empty\\else T\\fi\\fi}",
          "\\setbeamertemplate{background}{\\if T\\brandistitle\\brandbg{\\brandbgdir/title.pdf}\\else\\brandbg{\\brandbgdir/content.pdf}\\fi}",
-         "\\newcommand\\brandfootbox[4]{\\node[anchor=north west,inner sep=0,text width=#3,align=#4,font=\\tiny,text=brandSecondary] at (#1,#2)}",
+         "\\newcommand\\brandfootbox[5]{\\node[anchor=north west,inner sep=0,text width=#3,align=#4,font=\\tiny,text=#5] at (#1,#2)}",
          "\\setbeamertemplate{footline}{\\if T\\brandistitle\\else\\begin{tikzpicture}[remember picture,overlay,x=\\paperwidth,y=-\\paperheight,shift={(current page.north west)}]",
-         *[f"  \\brandfootbox{{{frac(c[pos]['x'],W)}}}{{{frac(c[pos]['y'],H)}}}{{{c[pos]['w']*k:.1f}pt}}{{{pos}}}{{{text}}};"
+         *[f"  \\brandfootbox{{{frac(c[pos]['x'],W)}}}{{{frac(c[pos]['y'],H)}}}{{{c[pos]['w']*k:.1f}pt}}{{{ {'l': 'left', 'ctr': 'center', 'r': 'right'}.get(c[pos]['align'], 'left') }}}{{brandFoot{pos}}}{{{text}}};"
            for pos, text in (("left", f"\\textbf{{{url}}}"), ("center", "\\brandfooter"), ("right", "\\insertframenumber")) if pos in c],
          "\\end{tikzpicture}\\fi}",
          # title page: template title slide, text placed in its title and subtitle boxes
          "\\setbeamertemplate{title page}{\\begin{tikzpicture}[remember picture,overlay,x=\\paperwidth,y=-\\paperheight,shift={(current page.north west)}]",
-         f"  \\node[anchor=south west,inner sep=0,text width={t['title']['w']*k:.1f}pt,font=\\brandhead\\fontsize{{{t['title'].get('size',54)*k:.1f}}}{{{t['title'].get('size',54)*k:.1f}}}\\selectfont,text=brandTitle] at ({frac(t['title']['x'],W)},{frac(t['title']['y']+t['title']['h'],H)}) {{\\inserttitle}};",
+         f"  \\node[anchor=south west,inner sep=0,text width={t['title']['w']*k:.1f}pt,font=\\brandhead\\fontsize{{{t['title'].get('size',54)*k:.1f}}}{{{t['title'].get('size',54)*k:.1f}}}\\selectfont,text=brandTitle] (brandtitle) at ({frac(t['title']['x'],W)},{frac(t['title']['y']+t['title']['h'],H)}) {{\\inserttitle}};",
+         "  \\ifdefined\\brandeyebrow\\node[anchor=south west,inner sep=0,font=\\scriptsize\\bfseries,text=brandSecondary] at ([yshift=6pt]brandtitle.north west) {\\MakeUppercase{\\brandeyebrow}};\\fi",
          f"  \\node[anchor=north west,inner sep=0,text width={t['body']['w']*k:.1f}pt,font=\\fontsize{{{t['body'].get('size',24)*k:.1f}}}{{{t['body'].get('size',24)*k*1.2:.1f}}}\\selectfont,text=brandSubtitle,align=left] at ({frac(t['body']['x'],W)},{frac(t['body']['y'],H)}) {{\\insertsubtitle\\\\[2pt]\\insertauthor\\\\\\insertinstitute}};",
          "\\end{tikzpicture}}",
          # section divider: template section layout
@@ -302,6 +354,9 @@ def write_beamer(cfg, brand, geo, out):
          ]
     L.insert(3, f"\\definecolor{{brandTitle}}{{HTML}}{{{t['title'].get('color') or col['foreground']}}}")
     L.insert(3, f"\\definecolor{{brandSubtitle}}{{HTML}}{{{t['body'].get('color') or col['background']}}}")
+    for pos in ("left", "center", "right"):
+        if pos in c:
+            L.insert(3, f"\\definecolor{{brandFoot{pos}}}{{HTML}}{{{c[pos].get('color') or col['secondary']}}}")
     L.insert(3, f"\\definecolor{{brandSection}}{{HTML}}{{{s['title'].get('color') or col['primary']}}}")
     (out / "beamerthemecharter.sty").write_text("\n".join(L) + "\n")
 
@@ -320,6 +375,8 @@ def write_scss(cfg, brand, geo, out):
     foot = lambda pos, cls, extra="": (f".reveal .brand-foot .{cls} {{ left: {px(c[pos]['x'])}; top: {px(c[pos]['y'])}; width: {px(c[pos]['w'])}; height: {px(c[pos]['h'])}; {extra} }}"
                                         if pos in c else f".reveal .brand-foot .{cls} {{ display: none; }}")
     ref = c.get("center") or c.get("right") or {}
+    # footer text keeps the template placeholder's alignment and colour
+    fjust = lambda pos: (f"justify-content: {JUSTIFY[c[pos]['align']]}; color: #{c[pos].get('color') or col['secondary']};" if pos in c else "")
     # Google faces from _brand.yml load in the browser; LaTeX and PowerPoint use their own fallbacks
     google = [f for f in brand.get("typography", {}).get("fonts", []) if f.get("source") == "google"]
     fonts = "&".join(f"family={f['family'].replace(' ', '+')}" + (f":wght@{';'.join(map(str, sorted(f['weight'])))}" if f.get("weight") else "") for f in google)
@@ -341,21 +398,23 @@ $presentation-font-size-root: {px(geo['body_size'] * 0.8)};
 .reveal .slides section.slide.level2 > h2 {{ {box(c['title'])} display: flex; align-items: flex-end; font-size: {px(geo['title_size'])}; line-height: 0.9; }}
 .reveal .slides section.slide.level2 {{ padding-top: {px(c['body']['y'])} !important; padding-left: {px(c['body']['x'])}; padding-right: {px(W - c['body']['x'] - c['body']['w'])}; box-sizing: border-box; height: 100%; }}
 .reveal .slides section.title-slide.level1 > h1 {{ {box(s['title'])} display: flex; align-items: flex-end; font-size: {px(s['title'].get('size', 60))}; color: #{s['title'].get('color') or col['primary']}; }}
-#title-slide .title {{ {box(t['title'])} display: flex; align-items: flex-end; font-size: {px(t['title'].get('size', 54))}; color: #{t['title'].get('color') or col['foreground']}; text-align: left; }}
-#title-slide .subtitle, #title-slide .quarto-title-authors {{ color: #{t['body'].get('color') or col['background']}; text-align: left; font-size: {px(t['body'].get('size', 24))}; }}
-#title-slide .quarto-title-block-meta, #title-slide .subtitle {{ position: absolute; left: {pc(t['body']['x'], W)}; width: {pc(t['body']['w'], W)}; }}
-#title-slide .subtitle {{ top: {pc(t['body']['y'], H)}; }}
-#title-slide .quarto-title-authors {{ position: absolute; left: {pc(t['body']['x'], W)}; top: calc({pc(t['body']['y'], H)} + 1.4em); justify-content: flex-start; }}
+#title-slide .title {{ {box(t['title'])} display: flex; flex-direction: column; justify-content: flex-end; align-items: flex-start; font-size: {px(t['title'].get('size', 54))}; color: #{t['title'].get('color') or col['foreground']}; text-align: left; }}
+// subtitle, authors and institute flow down from the body box top, so a wrapped subtitle pushes the rest down
+// Quarto marks the title slide `center`: reveal then shifts it down and shrinks it; pin it to the template box
+#title-slide {{ top: 0 !important; height: 100% !important; box-sizing: border-box; padding: {px(t['body']['y'] + 3.6)} {px(W - t['body']['x'] - t['body']['w'] + 7.2)} 0 {px(t['body']['x'] + 7.2)} !important; text-align: left; }}
+#title-slide .subtitle, #title-slide .quarto-title-authors {{ position: static; margin: 0; color: #{t['body'].get('color') or col['background']}; text-align: left; font-size: {px(t['body'].get('size', 24))}; }}
+#title-slide .quarto-title-authors {{ display: block; margin-top: 0.6em; font-size: {px(t['body'].get('size', 24) * 0.7)}; line-height: 1.5; }}
 #title-slide .quarto-title-author {{ padding: 0; }}
+#title-slide .quarto-title-author-name, #title-slide .quarto-title-affiliation {{ margin: 0; }}
 .reveal table {{ font-size: 0.65em; }}
 // footer drawn inside each slide (charter.lua), so it scales with the slide instead of sticking to the window edges
 .reveal .footer, .reveal .slide-number {{ display: none !important; }}
 .reveal .slides section.slide {{ height: 100%; box-sizing: border-box; }}
 .reveal .brand-foot > span {{ position: absolute; display: flex; align-items: center; color: #{ref.get('color') or col['secondary']}; font-size: {px(ref.get('size', 12))}; line-height: 1; }}
-{foot('left', 'brand-url', 'font-weight: bold;')}
+{foot('left', 'brand-url', fjust('left') + ' font-weight: bold;')}
 .reveal .brand-foot .brand-url::after {{ content: "{brand.get('meta', {}).get('link', '').split('//')[-1]}"; }}
-{foot('center', 'brand-text', 'justify-content: center;')}
-{foot('right', 'brand-num', 'justify-content: flex-end; color: #' + ((c.get('right') or {}).get('color') or col['secondary']) + ';')}
+{foot('center', 'brand-text', fjust('center'))}
+{foot('right', 'brand-num', fjust('right'))}
 """
     (out / f"{cfg['name']}.scss").write_text(css)
 
@@ -430,6 +489,13 @@ def reference(qmd):
     p.save(qmd.parent / "_reference.pptx")
 
 
+def hook(proj, key, cmd, mark):
+    """Add cmd to a Quarto pre/post-render hook, keeping the deck's own entries; an older form of cmd (same mark) is replaced."""
+    cur = proj.get(key) or []
+    cur = [c for c in ([cur] if isinstance(cur, str) else cur) if mark not in c]
+    proj[key] = cur + [cmd] if cur else cmd
+
+
 def deck(cdir, ddir):
     cfg, _ = load(cdir)
     src = cdir / "build" / "_extensions" / cfg["name"]
@@ -448,7 +514,9 @@ def deck(cdir, ddir):
     proj.setdefault("output-dir", "build")
     # revealjs backgrounds referenced by relative path: copy them into build/ so it stays self-sufficient
     proj.setdefault("resources", [f"_extensions/{cfg['name']}/backgrounds/*.png"])
-    proj["pre-render"] = f"uv run {script} reference"
+    hook(proj, "pre-render", f"uv run {script} reference", "charter.py reference")
+    # pptx: tiles, cards and steps redrawn as shapes after pandoc (pptx_components.py)
+    hook(proj, "post-render", f"uv run {script.parent / 'pptx_components.py'}", "pptx_components.py")
     conf["charter"] = str(cdir)
     q.write_text(yaml.safe_dump(conf, sort_keys=False))
     print(f"{cfg['name']} extension installed in {dst}; formats: {cfg['name']}-pptx, {cfg['name']}-beamer, {cfg['name']}-revealjs")

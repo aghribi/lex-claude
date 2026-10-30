@@ -13,9 +13,12 @@ $comp-text: mix($body-color, #ffffff, 78%);  // secondary text: tile labels, car
 .reveal .slides section.present .comp-anim > * { animation: comp-rise 0.5s ease-out both; animation-delay: calc(0.15s + var(--i, 0) * 0.12s); }
 @media (prefers-reduced-motion: reduce) { .reveal .slides section.present .comp-anim > *, .reveal .slides section.present .timeline * { animation: none; } }
 
-// content sits centred in the template body box; reveal writes display:none inline on far slides, keep those hidden
-.reveal .slides section.slide.level2:not([style*="display: none"]) { display: flex !important; flex-direction: column; justify-content: center; padding-bottom: 90px; }
+// content flows from the body box top; tiles sit at its bottom. reveal writes display:none inline on far slides, keep those hidden
+.reveal .slides section.slide.level2:not([style*="display: none"]) { display: flex !important; flex-direction: column; padding-bottom: 110px; }
 .reveal .slides section.slide.level2 > * { flex: none; }
+.reveal .slides section.slide.level2 > .tiles { margin-top: auto; }
+// title slide label set by `eyebrow:` (charter.lua puts it inside the title)
+.reveal .eyebrow { display: block; font-family: $font-family-sans-serif; font-size: 0.22em; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase; color: mix($brand-secondary, #ffffff, 75%); margin-bottom: 0.45em; line-height: 1.2; }
 // menu and chalkboard stay on their keys (m, c, b); their buttons would sit on the footer
 .reveal .slide-menu-button, .reveal .slide-chalkboard-buttons { display: none !important; }
 .reveal h1, .reveal h2 { font-weight: 600; }

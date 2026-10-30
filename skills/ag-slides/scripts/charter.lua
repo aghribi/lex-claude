@@ -17,9 +17,27 @@ local function role_of(h)
   if h.level == 2 then return "content" end
 end
 
+local function html_esc(s)
+  return (s:gsub("&", "&amp;"):gsub("<", "&lt;"):gsub(">", "&gt;"))
+end
+
+local TEX = { ["\\"] = "\\textbackslash{}", ["~"] = "\\textasciitilde{}", ["^"] = "\\textasciicircum{}" }
+
+local function tex_esc(s)
+  return (s:gsub("[\\{}$&#^_%%~]", function(c) return TEX[c] or ("\\" .. c) end))
+end
+
+-- `eyebrow:` in the front matter: a short label above the title on the title slide
 function Meta(meta)
   footer = meta.footer and pandoc.utils.stringify(meta.footer) or ""
+  local eyebrow = meta.eyebrow and pandoc.utils.stringify(meta.eyebrow)
   if quarto.doc.is_format("revealjs") then
+    if eyebrow and meta.title then
+      meta.pagetitle = meta.pagetitle or pandoc.utils.stringify(meta.title)
+      local t = pandoc.Inlines({ pandoc.RawInline("html", '<span class="eyebrow">' .. html_esc(eyebrow) .. "</span>") })
+      t:extend(meta.title)
+      meta.title = t
+    end
     local attrs = meta["title-slide-attributes"] or {}
     attrs["data-background-image"] = attrs["data-background-image"] or (bg_rel .. "/title.png")
     attrs["data-background-size"] = attrs["data-background-size"] or "contain"
@@ -29,6 +47,7 @@ function Meta(meta)
       "\\def\\brandbgdir{" .. bg .. "}",
       "\\usepackage{" .. quarto.utils.resolve_path("beamerthemecharter") .. "}",
       "\\renewcommand\\brandfooter{" .. footer .. "}",
+      eyebrow and ("\\def\\brandeyebrow{" .. tex_esc(eyebrow) .. "}") or "",
     }, "\n"))
   end
   return meta
@@ -53,10 +72,6 @@ local function grid_kind(div)
   for _, c in ipairs(div.classes) do
     if GRIDS[c] then return c end
   end
-end
-
-local function html_esc(s)
-  return (s:gsub("&", "&amp;"):gsub("<", "&lt;"):gsub(">", "&gt;"))
 end
 
 -- `- M8 D2.1 Accelerator measurement procedures (CERN)`: month, id, title; ids starting with MS are milestones
@@ -182,6 +197,49 @@ function Div(div)
   return div
 end
 
+-- pptx: pandoc cannot draw tiles, cards or steps, so their content goes to _components.json beside the deck,
+-- keyed by slide title; pptx_components.py (post-render) replaces the fallback list with shapes
+local function child_parts(child)
+  local head, tag, body = "", nil, {}
+  for j, b in ipairs(child.content) do
+    if b.content then
+      if j == 1 then
+        head = pandoc.utils.stringify(b)
+      else
+        local rest = pandoc.Inlines({})
+        for _, il in ipairs(b.content) do
+          if il.t == "Span" and il.classes:includes("tag") then tag = pandoc.utils.stringify(il) else rest:insert(il) end
+        end
+        body[#body + 1] = pandoc.utils.stringify(rest)
+      end
+    end
+  end
+  return { head = head, tag = tag, body = (table.concat(body, " "):gsub("^%s+", "")), accent = child.classes:includes("accent") }
+end
+
+local function record(doc)
+  if not quarto.doc.is_format("pptx") then return nil end
+  local slides, title = {}, nil
+  for _, b in ipairs(doc.blocks) do
+    if b.t == "Header" and b.level <= 2 then
+      title = pandoc.utils.stringify(b.content)
+    elseif b.t == "Div" and title and grid_kind(b) then
+      local items = {}
+      for _, c in ipairs(b.content) do
+        if c.t == "Div" then items[#items + 1] = child_parts(c) end
+      end
+      slides[#slides + 1] = { title = title, kind = grid_kind(b), items = items }
+    end
+  end
+  local m = doc.meta
+  local out = { slides = slides, eyebrow = m.eyebrow and pandoc.utils.stringify(m.eyebrow) or nil,
+                institute = m.institute and pandoc.utils.stringify(m.institute) or nil }
+  local dir = pandoc.path.directory(quarto.doc.input_file)
+  local f = assert(io.open(pandoc.path.join({ dir, "_components.json" }), "w"))
+  f:write(pandoc.json.encode(out))
+  f:close()
+end
+
 -- revealjs: close every slide with the footer; a block before a slide heading ends the previous slide
 -- numbers are written at build time: reveal hides far slides (display: none) and CSS counters skip them
 local function foot(n)
@@ -204,4 +262,4 @@ function Pandoc(doc)
   return doc
 end
 
-return { { Meta = Meta }, { Header = Header, Div = Div }, { Pandoc = Pandoc } }
+return { { Meta = Meta }, { Pandoc = record }, { Header = Header, Div = Div }, { Pandoc = Pandoc } }

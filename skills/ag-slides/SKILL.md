@@ -41,7 +41,7 @@ Setting up a new charter:
 3. Build, open `build/layouts.pdf`, pick `layouts:` roles from the pictures. Layout names lie (iRIS "Blank-white" is green).
 4. Pandoc needs layouts named `Title Slide, Title and Content, Section Header, Two Content, Comparison, Content with Caption, Blank`; alias missing ones in `charter.yml`.
 5. Fonts only in Office (e.g. Arial Nova Cond) get `font_fallbacks` for LaTeX and browsers; the pptx keeps the real font.
-6. A template that needs a lighter hand: `restyle:` in `charter.yml`, applied at build time to a copy of the template, so the official file stays as issued and all three formats follow. Per layout: `background` (palette name), `remove` (shape names), `width` (placeholder, pt), `color` (text, palette name; set even where the shape inherits its colour), `fade` (picture opacity, %), `add` (bars `{x, y, w, h, fill: [colour]}`, a two-colour top-to-bottom gradient, `radius` in pt for a rounded pill). `master: {body_color: ...}` recolours the master body text. Shape names come from the layout; restyle every layout pandoc uses (Two Content, Comparison, Content with Caption too).
+6. A template that needs a lighter hand: `restyle:` in `charter.yml`, applied at build time to a copy of the template, so the official file stays as issued and all three formats follow. Per layout: `background` (palette name), `remove` (shape names), `width` or `box: {name: [x, y, w, h]}` (pt), `align: {name: l|ctr|r}`, `font: {name: {size, bold}}`, `color` (text, palette name; set even where the shape inherits its colour), `fade` (picture opacity, %), `add` (bars `{x, y, w, h, fill: [colour]}`, a two-colour top-to-bottom gradient, `radius` in pt for a rounded pill; or static text `{x, y, w, h, text, size, color}`). Footer boxes keep their alignment and colour in every format (geometry reads them). `master: {body_color: ...}` recolours the master body text. Shape names come from the layout; restyle every layout pandoc uses (Two Content, Comparison, Content with Caption too).
 7. To choose a look, mock it up first: either PowerPoint renders of a template copy, or a claude.ai Slides style study (with partner material replaced by placeholders, and only after the user agrees to the upload). Then write the chosen look into `restyle:`, `_brand.yml` and `components.scss`. `_brand.yml` fonts with `source: google` load in revealjs (`@import` in the generated scss); the pptx keeps the template fonts and Beamer falls back through `font_fallbacks`.
 
 ## Deck
@@ -54,6 +54,7 @@ quarto render slides.qmd                                                       #
 Front matter:
 
 ```yaml
+eyebrow: "..."                                   # optional label above the title
 title: "..."
 subtitle: "..."
 author: "A. Ghribi"
@@ -76,10 +77,10 @@ Every charter ships `components.scss` (colours from `$brand-*`) and the filter r
 
 | Markup | revealjs | pptx, beamer |
 |---|---|---|
-| `::: {.lead}` one sentence `:::` | key message in primary colour | paragraph |
-| `::: {.tiles}` of `::: {.tile}` with `[160]{.num}` then a label | number tiles in a row | list, number in bold |
-| `::: {.cards}` of `::: {.card}`, first paragraph = card title; `.card .accent` for the odd one | cards in a row | list, `**title**: text` |
-| `::: {.steps .build}` of `::: {.step}` | numbered cards joined by arrows | list |
+| `::: {.lead}` one sentence `:::` | key message | paragraph |
+| `::: {.tiles}` of `::: {.tile}` with `[160]{.num}` then a label | number tiles at the bottom of the slide | pptx: shapes; beamer: list, number in bold |
+| `::: {.cards}` of `::: {.card}`, first paragraph = card title; `.card .accent` for the odd one | cards in a row | pptx: shapes; beamer: list, `**title**: text` |
+| `::: {.steps .build}` of `::: {.step}` | numbered cards joined by arrows | pptx: shapes; beamer: list |
 | `::: {.timeline months=50 now=1}` over `- M8 D2.1 Title` items (ids starting `MS` are milestones) | axis, deliverables above, milestones below, labels stacked so none overlap | two tables in columns |
 | `[T2.3]{.tag}` | small pill | text |
 | `[Source: ...]{.credit}` (no image on the slide) | small grey right line | paragraph |
@@ -89,6 +90,7 @@ Rules:
 - At most 4 tiles, cards or steps per slide (`check_deck.py` counts them); about 15 words per card. Timeline: at most 14 events, titles of 2 to 4 words; `label-up` and `label-down` set the label width in months when the defaults (months/4, months/6) collide.
 - Animation, revealjs only: slides fade (`transition: fade`), tiles and cards rise in turn when their slide opens, the timeline axis draws itself and events appear in month order. `.build` turns children into fragments the speaker steps through: use it where the order is the message (a pipeline, a plan), not on every slide. `prefers-reduced-motion` turns entrance animations off.
 - Content is centred vertically in the template body box.
+- pptx shapes: pandoc leaves tiles, cards and steps as a list; `charter.lua` writes their content to `_components.json` and the post-render step `pptx_components.py` (wired by `charter.py deck`, which keeps a deck's own pre/post-render entries) replaces the list with shapes in the body box, and adds the eyebrow, smaller author lines and the institute on the title slide. Reruns change nothing.
 - pptx keeps one image per column and drops text under an image: merge image pairs into one figure (PIL), put credits in the image caption, put text in the other column.
 - `{auto-animate=true}` on two consecutive `##` headings morphs matching elements (same text or `data-id`) between them; use it when the second slide zooms into a part of the first.
 - Screenshots and decktape: append `?fragments=false` to the URL to show every fragment (`compare.py` does).
