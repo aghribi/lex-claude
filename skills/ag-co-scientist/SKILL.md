@@ -7,6 +7,23 @@ Co-scientist loop, after Google's AI co-scientist (Gottweis et al., Nature 2026:
 
 The Co-scientist rules in the active identity apply throughout: no invented citation or number, `[UNVERIFIED]` with its dossier, claim strength stays honest.
 
+**Rules of a model.** Don't invent unphysical rules. Each rule must be verified (derived, from a checked source, or shown against a reference computation) before it enters a model, a cut, a limit or a verdict.
+
+## Which skill for which step
+
+| Need | Skill |
+|---|---|
+| Find or check a reference | `paper-lookup`, `citation-management`, `literature-review` |
+| Open up ideas before the loop | `scientific-brainstorming` |
+| Turn an observation into testable hypotheses | `hypothesis-generation` |
+| Appraise a claim or the evidence for it | `scientific-critical-thinking` |
+| Attack an assumption or a mechanism | `devils-advocate` |
+| Check a rule, derivation or closed form | `verify-math`, which routes to `numerical-check` for sweeps |
+| Check units, magnitudes and uncertainty | `uncertainty-and-units` |
+| Design the discriminating experiment | `experimental-design` |
+| Run a simulation or sweep | `computational-experiments` |
+| Analyse the outcome | `statistical-analysis` |
+
 ## Step 1. Frame (mandatory)
 
 Restate in at most five lines and get confirmation before spending compute:
