@@ -50,11 +50,15 @@ PANDOC_KEEPS = ("/slide", "/slideMaster", "/notesMaster", "/theme", "/presProps"
 
 
 def save_reference(p, path):
-    for rId, rel in list(p.part.rels.items()):
-        if not rel.reltype.endswith(PANDOC_KEEPS):
-            p.part.drop_rel(rId)
-    for el in p.part._element.findall("p:handoutMasterIdLst", NS):
-        p.part._element.remove(el)
+    drop = {rId for rId, rel in p.part.rels.items() if not rel.reltype.endswith(PANDOC_KEEPS)}
+    # elements pointing at dropped parts go too (handout master list, Google slidesCustomData in an extLst)
+    rid = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id"
+    for el in [e for e in p.part._element.iter() if e.get(rid) in drop]:
+        ext = next((a for a in el.iterancestors() if a.tag == f"{{{NS['p']}}}ext"), None)
+        target = ext if ext is not None else (el.getparent() if el.getparent().tag.endswith("IdLst") else el)
+        target.getparent().remove(target)
+    for rId in drop:
+        p.part.drop_rel(rId)
     p.save(path)
 
 

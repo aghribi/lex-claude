@@ -246,8 +246,9 @@ def draw(slide, comp, body, col, fonts, ddir):
             png = rasterise(ddir, f"{ICONS}/{it['icon']}.svg", color=col["primary"], px=192)
             pa.s.shapes.add_picture(str(png), Pt(x + 14), Pt(ty), Pt(30), Pt(30)).name = TAG + "icon"
             ty += 38
-        pa.text(x + 14, ty, w - 28, 26, it["head"], 19, col["primary"], head=True, bold=True)
-        ty += 30
+        head_h = max(1, math.ceil(len(it["head"]) * 0.5 * 19 / (w - 28))) * 19 * 1.2
+        pa.text(x + 14, ty, w - 28, head_h, it["head"], 19, col["primary"], head=True, bold=True)
+        ty += head_h + 7
         if it.get("tag"):
             tw = 0.62 * 9 * len(it["tag"]) + 12
             pill = pa.rect(x + 14, ty, tw, 15, col["secondary"], kind=MSO_SHAPE.ROUNDED_RECTANGLE, radius=0.3)

@@ -32,8 +32,10 @@ def pdf_pages(pdf, tag):
 
 rows = {}
 if (d / f"{a.stem}.pptx").exists():
-    subprocess.run([HERE / "pptx2pdf.sh", d / f"{a.stem}.pptx", tmp / "pptx.pdf"], check=True, stdout=subprocess.DEVNULL)
-    rows["pptx"] = pdf_pages(tmp / "pptx.pdf", "pptx")
+    # next to the pptx: sandboxed PowerPoint cannot write to the system temp folder
+    pptx_pdf = d / f"{a.stem}_pptx.pdf"
+    subprocess.run([HERE / "pptx2pdf.sh", d / f"{a.stem}.pptx", pptx_pdf], check=True, stdout=subprocess.DEVNULL)
+    rows["pptx"] = pdf_pages(pptx_pdf, "pptx")
 if (d / f"{a.stem}.pdf").exists():
     rows["beamer"] = pdf_pages(d / f"{a.stem}.pdf", "beamer")
 if (d / f"{a.stem}.html").exists():
