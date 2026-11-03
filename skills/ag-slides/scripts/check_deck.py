@@ -56,6 +56,9 @@ for i, h in enumerate(heads):
     for path in re.findall(r"!\[[^\]]*\]\(([^)\s]+)", raw):
         if not re.match(r"https?://", path) and not (a.qmd.parent / path).exists():
             findings.append(("HIGH", where, f"figure not found: {path}"))
+    for path in re.findall(r'\.diagram[^}]*\bsrc="([^"]+)"', raw):
+        if not (a.qmd.parent / path).exists():
+            findings.append(("HIGH", where, f"diagram spec not found: {path}"))
     if level == "#" or ".plain" in title:
         continue
     content += 1

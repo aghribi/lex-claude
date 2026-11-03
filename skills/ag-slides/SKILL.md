@@ -71,6 +71,8 @@ Slide roles: `#` section divider, `##` content, `## Title {.plain}` plain backgr
 
 Re-run `charter.py deck` after every charter rebuild.
 
+Diagrams: `::: {.diagram src="figures/x.yml"}` and an empty closing `:::`. The spec format is in the `scripts/diagram.py` docstring (boxes, flows, text, images, steps with captions). `diagram.py` (pre-render, needs `rsvg-convert`) draws it: revealjs inline SVG with fragments and moving flows, beamer one overlay per step, pptx native shapes in groups that fade in on click. Steps stack, so a `clear:` or a full-canvas image swaps the picture. Icons: `icon="name"` on a card, a lucide name, fetched once into `_icons/`. Beamer has more pages than slides on diagram slides, so `compare.py` rows stop lining up after the first diagram.
+
 ## Components and animation
 
 Every charter ships `components.scss` (colours from `$brand-*`) and the filter rules below. A slide with a bare list on a white body is the last resort: reach for a component first.

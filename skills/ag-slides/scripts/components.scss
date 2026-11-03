@@ -19,6 +19,10 @@ $comp-text: mix($body-color, #ffffff, 78%);  // secondary text: tile labels, car
 .reveal .slides section.slide.level2 > .tiles { margin-top: auto; }
 // title slide label set by `eyebrow:` (charter.lua puts it inside the title)
 .reveal .eyebrow { display: block; font-family: $font-family-sans-serif; font-size: 0.22em; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase; color: mix($brand-secondary, #ffffff, 75%); margin-bottom: 0.45em; line-height: 1.2; }
+// several authors: the institute Quarto attaches to the first one goes after the last
+.reveal #title-slide .quarto-title-authors { display: flex; flex-direction: column; }
+.reveal #title-slide .quarto-title-author { display: contents; }
+.reveal #title-slide .quarto-title-affiliation { order: 1; }
 // menu and chalkboard stay on their keys (m, c, b); their buttons would sit on the footer
 .reveal .slide-menu-button, .reveal .slide-chalkboard-buttons { display: none !important; }
 .reveal h1, .reveal h2 { font-weight: 600; }
@@ -51,6 +55,18 @@ $comp-text: mix($body-color, #ffffff, 78%);  // secondary text: tile labels, car
 .reveal .card > p:first-child, .reveal .step > p:first-child { font-family: $presentation-heading-font; font-weight: 600; font-size: 1.5em; color: $brand-primary; line-height: 1.1; margin-bottom: 0.5em; }
 .reveal .card .tag, .reveal .step .tag { display: table; margin-bottom: 0.4em; }
 .reveal .card.accent { border-top-color: $brand-secondary; }
+
+// icon above a card title (`icon=` on the card), and `.diagram`: a drawing from diagram.py filling the body box
+.reveal .card .ico, .reveal .step .ico { display: block; color: $brand-primary; margin-bottom: 0.3em; }
+.reveal .card .ico svg, .reveal .step .ico svg { display: block; width: 1.9em; height: 1.9em; }
+.reveal .card > .ico + p, .reveal .step > .ico + p { font-family: $presentation-heading-font; font-weight: 600; font-size: 1.5em; color: $brand-primary; line-height: 1.1; margin-bottom: 0.5em; }
+// cards with icons fill the body box, in larger type
+.reveal .slides section.slide.level2 > .cards:has(.ico) { flex: 1 1 auto; max-height: 470px; }
+.reveal .card:has(.ico) { font-size: 0.86em; }
+.reveal .cards:has(> :nth-child(5)) .card:has(.ico) { font-size: 0.68em; }
+.reveal .diagram { margin: 0 -28px; }
+.reveal .diagram svg { display: block; width: 100%; height: auto; overflow: visible; }
+.reveal .diagram svg .fragment { transition: opacity 0.45s ease; }
 
 // steps: numbered cards joined by arrows, left to right
 .reveal .steps { counter-reset: step; gap: 1.2em; }

@@ -175,8 +175,36 @@ local function timeline_columns(evs)
   return pandoc.Div(cols, pandoc.Attr("", { "columns" }))
 end
 
+-- `.diagram src=figures/x.yml`: diagram.py (pre-render) drew it into _diagrams/.
+-- revealjs: inline svg with fragments. beamer: one overlay per step. pptx: pptx_components.py draws it.
+local function deck_file(rel)
+  return pandoc.path.join({ pandoc.path.directory(quarto.doc.input_file), rel })
+end
+
+local function read_all(path)
+  local f = assert(io.open(path, "r"), "missing " .. path .. ": is diagram.py in the pre-render hook?")
+  local s = f:read("a")
+  f:close()
+  return s
+end
+
+local function diagram(div)
+  local stem = pandoc.path.split_extension(pandoc.path.filename(div.attributes.src))
+  if quarto.doc.is_format("revealjs") then
+    return pandoc.RawBlock("html", '<div class="diagram">' .. read_all(deck_file("_diagrams/" .. stem .. ".svg")) .. "</div>")
+  elseif quarto.doc.is_format("beamer") then
+    local out = {}
+    for n = 0, tonumber(read_all(deck_file("_diagrams/" .. stem .. ".steps"))) - 1 do
+      out[#out + 1] = string.format("\\includegraphics<%d>[width=\\linewidth]{%s}", n + 1, deck_file("_diagrams/" .. stem .. "-" .. n .. ".pdf"))
+    end
+    return pandoc.RawBlock("latex", table.concat(out, "\n"))
+  end
+  return pandoc.BulletList({ { pandoc.Plain({ pandoc.Str("diagram") }) } })  -- removed by pptx_components.py
+end
+
 function Div(div)
   local reveal = quarto.doc.is_format("revealjs")
+  if div.classes:includes("diagram") then return diagram(div) end
   if div.classes:includes("timeline") then
     local evs = timeline_events(div)
     return reveal and timeline_html(div, evs) or timeline_columns(evs)
@@ -190,6 +218,9 @@ function Div(div)
   for _, child in ipairs(div.content) do
     if child.t == "Div" then
       child.attributes.style = "--i:" .. i
+      if child.attributes.icon then
+        child.content:insert(1, pandoc.RawBlock("html", '<span class="ico">' .. read_all(deck_file("_icons/" .. child.attributes.icon .. ".svg")) .. "</span>"))
+      end
       if build then child.classes:insert("fragment") end
       i = i + 1
     end
@@ -214,7 +245,7 @@ local function child_parts(child)
       end
     end
   end
-  return { head = head, tag = tag, body = (table.concat(body, " "):gsub("^%s+", "")), accent = child.classes:includes("accent") }
+  return { head = head, tag = tag, body = (table.concat(body, " "):gsub("^%s+", "")), accent = child.classes:includes("accent"), icon = child.attributes.icon }
 end
 
 local function record(doc)
@@ -223,12 +254,14 @@ local function record(doc)
   for _, b in ipairs(doc.blocks) do
     if b.t == "Header" and b.level <= 2 then
       title = pandoc.utils.stringify(b.content)
+    elseif b.t == "Div" and title and b.classes:includes("diagram") then
+      slides[#slides + 1] = { title = title, kind = "diagram", src = b.attributes.src }
     elseif b.t == "Div" and title and grid_kind(b) then
       local items = {}
       for _, c in ipairs(b.content) do
         if c.t == "Div" then items[#items + 1] = child_parts(c) end
       end
-      slides[#slides + 1] = { title = title, kind = grid_kind(b), items = items }
+      slides[#slides + 1] = { title = title, kind = grid_kind(b), items = items, build = b.classes:includes("build") }
     end
   end
   local m = doc.meta

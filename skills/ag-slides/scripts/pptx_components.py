@@ -2,25 +2,28 @@
 # requires-python = ">=3.10"
 # dependencies = ["python-pptx>=1.0", "pyyaml>=6"]
 # ///
-"""Quarto post-render step: draw tiles, cards and steps in the deck's pptx as PowerPoint shapes.
+"""Quarto post-render step: draw tiles, cards, steps and diagrams in the deck's pptx as PowerPoint shapes.
 
   pptx_components.py [deck_dir]        default: the current directory (Quarto runs it from the project)
 
 pandoc cannot draw them, so charter.lua writes their content to `_components.json` and leaves a bullet list on
 the slide. This step removes that list and draws the component in the template body box, in the charter colours
 and the template fonts. It also adds the `eyebrow:` label, smaller author lines and the institute on the title
-slide. Slides already drawn (shapes named `agc:`) are left alone, so a rerun changes nothing.
+slide. `.diagram` steps and `.build` items become groups that appear on click. Slides already drawn (shapes named `agc:`) are left alone, so a rerun changes nothing.
 """
 import json, math, os, pathlib, sys
 import yaml
 from pptx import Presentation
 from pptx.dml.color import RGBColor
+from pptx.enum.dml import MSO_LINE
 from pptx.enum.shapes import MSO_SHAPE
 from pptx.enum.text import MSO_ANCHOR, PP_ALIGN
+from pptx.oxml import parse_xml
 from pptx.util import Pt
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from charter import NS, colors, load  # noqa: E402
+from charter import NS, load  # noqa: E402
+from diagram import ICONS, layers, palette, rasterise  # noqa: E402
 
 TAG = "agc:"
 
@@ -103,7 +106,110 @@ def split_body(slide, body):
     return h, " ".join(after).strip()
 
 
-def draw(slide, comp, body, col, fonts):
+def group(slide):
+    g = slide.shapes.add_group_shape()
+    g.name = TAG + "step"
+    return g
+
+
+def animate(slide, groups):
+    """Each group fades in on its own click."""
+    ids = iter(range(3, 10 ** 6))
+    clicks = []
+    for g in groups:
+        target = f'<p:tgtEl><p:spTgt spid="{g.shape_id}"/></p:tgtEl>'
+        a, b, c, d, e = (next(ids) for _ in range(5))
+        clicks.append(
+            f'<p:par><p:cTn id="{a}" fill="hold"><p:stCondLst><p:cond delay="indefinite"/></p:stCondLst><p:childTnLst>'
+            f'<p:par><p:cTn id="{b}" fill="hold"><p:stCondLst><p:cond delay="0"/></p:stCondLst><p:childTnLst>'
+            f'<p:par><p:cTn id="{c}" presetID="10" presetClass="entr" presetSubtype="0" fill="hold" nodeType="clickEffect"><p:stCondLst><p:cond delay="0"/></p:stCondLst><p:childTnLst>'
+            f'<p:set><p:cBhvr><p:cTn id="{d}" dur="1" fill="hold"><p:stCondLst><p:cond delay="0"/></p:stCondLst></p:cTn>{target}<p:attrNameLst><p:attrName>style.visibility</p:attrName></p:attrNameLst></p:cBhvr><p:to><p:strVal val="visible"/></p:to></p:set>'
+            f'<p:animEffect transition="in" filter="fade"><p:cBhvr><p:cTn id="{e}" dur="400"/>{target}</p:cBhvr></p:animEffect>'
+            "</p:childTnLst></p:cTn></p:par></p:childTnLst></p:cTn></p:par></p:childTnLst></p:cTn></p:par>")
+    xml = ('<p:timing xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:tnLst><p:par><p:cTn id="1" dur="indefinite" restart="never" nodeType="tmRoot"><p:childTnLst>'
+           '<p:seq concurrent="1" nextAc="seek"><p:cTn id="2" dur="indefinite" nodeType="mainSeq"><p:childTnLst>' + "".join(clicks) +
+           '</p:childTnLst></p:cTn><p:prevCondLst><p:cond evt="onPrev" delay="0"><p:tgtEl><p:sldTgt/></p:tgtEl></p:cond></p:prevCondLst>'
+           '<p:nextCondLst><p:cond evt="onNext" delay="0"><p:tgtEl><p:sldTgt/></p:tgtEl></p:cond></p:nextCondLst></p:seq>'
+           "</p:childTnLst></p:cTn></p:par></p:tnLst></p:timing>")
+    sld = slide._element
+    for old in sld.findall("p:timing", NS):
+        sld.remove(old)
+    ext = sld.find("p:extLst", NS)
+    el = parse_xml(xml)
+    ext.addprevious(el) if ext is not None else sld.append(el)
+
+
+def draw_prim(g, p, ox, oy, fonts):
+    x, y = p.get("x", 0) + ox, p.get("y", 0) + oy
+    if p["p"] in ("rect", "oval"):
+        kind = MSO_SHAPE.OVAL if p["p"] == "oval" else (MSO_SHAPE.ROUNDED_RECTANGLE if p.get("radius") else MSO_SHAPE.RECTANGLE)
+        r = g.shapes.add_shape(kind, Pt(x), Pt(y), Pt(p["w"]), Pt(p["h"]))
+        r.name = TAG + "box"
+        r.shadow.inherit = False
+        if p.get("fill"):
+            r.fill.solid()
+            r.fill.fore_color.rgb = RGBColor.from_string(p["fill"])
+        else:
+            r.fill.background()
+        if p.get("line"):
+            r.line.color.rgb = RGBColor.from_string(p["line"])
+            r.line.width = Pt(0.75)
+        else:
+            r.line.fill.background()
+        if p.get("radius"):
+            r.adjustments[0] = min(0.5, p["radius"] / min(p["w"], p["h"]))
+    elif p["p"] in ("poly", "shape"):
+        closed = p["p"] == "shape"
+        pts = [(round((a + ox) * 100), round((b + oy) * 100)) for a, b in p["points"]]
+        fb = g.shapes.build_freeform(pts[0][0], pts[0][1], scale=127)
+        fb.add_line_segments(pts[1:], close=closed)
+        r = fb.convert_to_shape()
+        r.name = TAG + "line"
+        r.shadow.inherit = False
+        if closed:
+            r.fill.solid()
+            r.fill.fore_color.rgb = RGBColor.from_string(p["fill"])
+            r.line.fill.background()
+        else:
+            r.fill.background()
+            r.line.color.rgb = RGBColor.from_string(p["color"])
+            r.line.width = Pt(p["width"])
+            if p["dash"]:
+                r.line.dash_style = MSO_LINE.DASH
+    elif p["p"] == "image":
+        pic = g.shapes.add_picture(str(p["path"]), Pt(x), Pt(y), Pt(p["w"]), Pt(p["h"]))
+        pic.name = TAG + "image"
+    else:
+        tb = g.shapes.add_textbox(Pt(x), Pt(y), Pt(p["w"]), Pt(p["h"]))
+        tb.name = TAG + "text"
+        tf = tb.text_frame
+        tf.word_wrap = True
+        tf.vertical_anchor = {"t": MSO_ANCHOR.TOP, "m": MSO_ANCHOR.MIDDLE, "b": MSO_ANCHOR.BOTTOM}[p["anchor"]]
+        for k in ("margin_left", "margin_right", "margin_top", "margin_bottom"):
+            setattr(tf, k, 0)
+        for i, q in enumerate(p["paras"]):
+            para = tf.paragraphs[0] if i == 0 else tf.add_paragraph()
+            para.alignment = {"l": PP_ALIGN.LEFT, "c": PP_ALIGN.CENTER, "r": PP_ALIGN.RIGHT}[p["align"]]
+            run = para.add_run()
+            run.text = q["s"]
+            run.font.size, run.font.bold, run.font.name = Pt(q["size"]), q.get("bold", False), fonts["head" if q.get("head") else "base"]
+            run.font.color.rgb = RGBColor.from_string(q["color"])
+
+
+def draw_diagram(slide, comp, body, col, fonts, ddir, slide_w):
+    split_body(slide, body)
+    spec = yaml.safe_load((ddir / comp["src"]).read_text())
+    ox, oy = (slide_w - spec["size"][0]) / 2, body["y"] + 2
+    groups = []
+    for ps in layers(spec, col, ddir):
+        g = group(slide)
+        for p in ps:
+            draw_prim(g, p, ox, oy, fonts)
+        groups.append(g)
+    animate(slide, groups[1:])
+
+
+def draw(slide, comp, body, col, fonts, ddir):
     pa = Painter(slide, col, fonts)
     items, kind = comp["items"], comp["kind"]
     lead_h, note = split_body(slide, body)
@@ -116,8 +222,12 @@ def draw(slide, comp, body, col, fonts):
     gap = 22 if kind == "steps" else 14
     w = (body["w"] - gap * (n - 1)) / n
     tint, line, muted = mix(col["secondary"], "FFFFFF", 0.14), mix(col["primary"], "FFFFFF", 0.25), mix(col["foreground"], "FFFFFF", 0.78)
+    groups = []
     for i, it in enumerate(items):
         x = body["x"] + i * (w + gap)
+        if comp.get("build"):
+            groups.append(group(slide))
+            pa = Painter(groups[-1], col, fonts)
         if kind == "tiles":
             h = 118
             y = bottom - h
@@ -127,11 +237,15 @@ def draw(slide, comp, body, col, fonts):
             pa.text(x + 18, y + 64, w - 26, h - 70, it["body"], 13, muted)
             continue
         y = top + (12 if kind == "steps" else 0)
-        h = min(175, bottom - y)
+        h = min(235 if it.get("icon") else 175, bottom - y)
         accent = col["secondary"] if it.get("accent") else col["primary"]
         pa.rect(x, y, w, h, "FFFFFF", line=line)
         pa.rect(x, y, w, 3, accent)
         ty = y + (20 if kind == "steps" else 14)
+        if it.get("icon"):
+            png = rasterise(ddir, f"{ICONS}/{it['icon']}.svg", color=col["primary"], px=192)
+            pa.s.shapes.add_picture(str(png), Pt(x + 14), Pt(ty), Pt(30), Pt(30)).name = TAG + "icon"
+            ty += 38
         pa.text(x + 14, ty, w - 28, 26, it["head"], 19, col["primary"], head=True, bold=True)
         ty += 30
         if it.get("tag"):
@@ -145,7 +259,7 @@ def draw(slide, comp, body, col, fonts):
             r.text, r.font.size, r.font.bold, r.font.name = it["tag"], Pt(9), True, fonts["base"]
             r.font.color.rgb = RGBColor.from_string("FFFFFF")
             ty += 21
-        pa.text(x + 14, ty, w - 28, y + h - ty - 10, it["body"], 13, muted)
+        pa.text(x + 14, ty, w - 28, y + h - ty - 10, it["body"], 15 if it.get("icon") else 13, muted)
         if kind == "steps":
             dot = pa.rect(x + 12, y - 11, 22, 22, col["secondary"], kind=MSO_SHAPE.OVAL)
             tf = dot.text_frame
@@ -159,6 +273,8 @@ def draw(slide, comp, body, col, fonts):
             if i < n - 1:
                 arrow = pa.rect(x + w + 6, y + h / 2 - 6, 10, 12, col["secondary"], kind=MSO_SHAPE.ISOSCELES_TRIANGLE)
                 arrow.rotation = 90
+    if groups:
+        animate(slide, groups)
 
 
 def title_slide(slide, data, geo, col, fonts):
@@ -194,7 +310,7 @@ def main(ddir):
     cdir = pathlib.Path(proj["charter"])
     cfg, brand = load(cdir)
     geo = yaml.safe_load((cdir / "build" / "geometry.yml").read_text())
-    col = colors(brand)
+    col = palette(brand)
     data = json.loads(data_file.read_text())
     prs = Presentation(pptx)
     fonts = template_fonts(prs)
@@ -208,7 +324,10 @@ def main(ddir):
             continue
         title = slide.shapes.title.text_frame.text.strip() if slide.shapes.title is not None else ""
         for comp in (c for c in data["slides"] if c["title"] == title):
-            draw(slide, comp, body, col, fonts)
+            if comp["kind"] == "diagram":
+                draw_diagram(slide, comp, body, col, fonts, ddir, prs.slide_width / 12700)
+            else:
+                draw(slide, comp, body, col, fonts, ddir)
             drawn += 1
     prs.save(pptx)
     print(f"pptx_components: {drawn} components drawn in {pptx}")

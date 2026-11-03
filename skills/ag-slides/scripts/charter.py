@@ -515,6 +515,7 @@ def deck(cdir, ddir):
     # revealjs backgrounds referenced by relative path: copy them into build/ so it stays self-sufficient
     proj.setdefault("resources", [f"_extensions/{cfg['name']}/backgrounds/*.png"])
     hook(proj, "pre-render", f"uv run {script} reference", "charter.py reference")
+    hook(proj, "pre-render", f"uv run {script.parent / 'diagram.py'}", "diagram.py")
     # pptx: tiles, cards and steps redrawn as shapes after pandoc (pptx_components.py)
     hook(proj, "post-render", f"uv run {script.parent / 'pptx_components.py'}", "pptx_components.py")
     conf["charter"] = str(cdir)
