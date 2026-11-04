@@ -97,6 +97,20 @@ Rules:
 - `{auto-animate=true}` on two consecutive `##` headings morphs matching elements (same text or `data-id`) between them; use it when the second slide zooms into a part of the first.
 - Screenshots and decktape: append `?fragments=false` to the URL to show every fragment (`compare.py` does).
 
+## Links
+
+Every link on a slide goes in the deck's `links.yml`, never in the slide text. `links.lua` and `pptx_links.py` draw it as a row of clickable links between body and footer, in all three formats. A deck without the file gets no strip. Keys are slide titles, `check_deck.py` flags a key that matches no slide.
+
+```yaml
+ESS - finding faults without labels:
+  - [git, Team code, https://github.com/org/repo/tree/main/team]   # git icon: repo or folder
+  - [data, Dataset, https://doi.org/...]                           # data icon: only where the data is public
+  - [info, Challenge page, https://...]                            # (i): page with more information
+  - [ref, "Author et al., PRAB 27 (2024)", https://doi.org/...]    # footnote style, no icon: paper, talk, Indico
+```
+
+Icons sit in `scripts/icons/` (lucide ISC, Simple Icons CC0); `charter.py build` renders them in the charter's secondary colour, so rebuild the charter once after updating the skill.
+
 ## Workflow
 
 1. `read_me.md`, `abstract.md`, `PLAN.md` from the presentation template: key message, audience, slot, one line per slide with its message and evidence. Get the plan approved before writing slides.

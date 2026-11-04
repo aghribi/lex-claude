@@ -100,3 +100,9 @@ $comp-text: mix($body-color, #ffffff, 78%);  // secondary text: tile labels, car
 .reveal .timeline .ev.down .lbl { top: 100%; padding-top: 0.2em; }
 .reveal .timeline .ev.down .lbl b { color: darken($brand-secondary, 12%); }
 .reveal .timeline .ev.late .lbl { left: auto; right: -0.4em; text-align: right; }
+
+// link strip per slide (links.lua), bottom edge set by the charter scss
+.reveal .links { position: absolute; display: flex; flex-wrap: wrap; gap: 4px 26px; font-size: 21px; line-height: 1.25; }
+.reveal .links a { display: inline-flex; align-items: center; gap: 7px; color: $brand-secondary; }
+.reveal .links svg { width: 24px; height: 24px; flex: none; }
+.reveal .links a.ref { color: $comp-text; font-style: italic; }

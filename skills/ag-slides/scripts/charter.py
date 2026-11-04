@@ -346,6 +346,8 @@ def write_beamer(cfg, brand, geo, out):
            for pos, text in (("left", f"\\textbf{{{url}}}"), ("center", "\\brandfooter"), ("right", "\\insertframenumber")) if pos in c],
          "\\end{tikzpicture}\\fi}",
          # title page: template title slide, text placed in its title and subtitle boxes
+         # link strip (links.lua): anchored above the footer, whatever the height of the slide content
+         f"\\newcommand\\brandlinks[1]{{\\begin{{tikzpicture}}[remember picture,overlay,x=\\paperwidth,y=-\\paperheight,shift={{(current page.north west)}}]\\node[anchor=south west,inner sep=0pt,text width={frac(c['body']['w'], W)}\\paperwidth,align=left,font=\\tiny] at ({frac(c['body']['x'], W)},{frac(strip_bottom(geo), H)}) {{#1}};\\end{{tikzpicture}}}}",
          "\\setbeamertemplate{title page}{\\begin{tikzpicture}[remember picture,overlay,x=\\paperwidth,y=-\\paperheight,shift={(current page.north west)}]",
          f"  \\node[anchor=south west,inner sep=0,text width={t['title']['w']*k:.1f}pt,font=\\brandhead\\fontsize{{{t['title'].get('size',54)*k:.1f}}}{{{t['title'].get('size',54)*k:.1f}}}\\selectfont,text=brandTitle] (brandtitle) at ({frac(t['title']['x'],W)},{frac(t['title']['y']+t['title']['h'],H)}) {{\\inserttitle}};",
          "  \\ifdefined\\brandeyebrow\\node[anchor=south west,inner sep=0,font=\\scriptsize\\bfseries,text=brandSecondary] at ([yshift=6pt]brandtitle.north west) {\\MakeUppercase{\\brandeyebrow}};\\fi",
@@ -363,6 +365,12 @@ def write_beamer(cfg, brand, geo, out):
             L.insert(3, f"\\definecolor{{brandFoot{pos}}}{{HTML}}{{{c[pos].get('color') or col['secondary']}}}")
     L.insert(3, f"\\definecolor{{brandSection}}{{HTML}}{{{s['title'].get('color') or col['primary']}}}")
     (out / "beamerthemecharter.sty").write_text("\n".join(L) + "\n")
+
+
+def strip_bottom(geo):
+    """Bottom edge of the link strip, in pt: just above the footer."""
+    c = geo["content"]
+    return min((c[k]["y"] for k in FOOTER_TYPES.values() if k in c), default=geo["slide"]["h"]) - 8
 
 
 def write_scss(cfg, brand, geo, out):
@@ -419,13 +427,23 @@ $presentation-font-size-root: {px(geo['body_size'] * 0.8)};
 .reveal .brand-foot .brand-url::after {{ content: "{brand.get('meta', {}).get('link', '').split('//')[-1]}"; }}
 {foot('center', 'brand-text', fjust('center'))}
 {foot('right', 'brand-num', fjust('right'))}
+.reveal .links {{ left: {px(c['body']['x'])}; right: {px(W - c['body']['x'] - c['body']['w'])}; bottom: {px(H - strip_bottom(geo))}; }}
 """
     (out / f"{cfg['name']}.scss").write_text(css)
+
+
+def write_icons(brand, ext):
+    """Link strip icons: SVG for revealjs (currentColor), PNG in the charter colour for pptx and beamer."""
+    shutil.copytree(HERE / "icons", ext / "icons")
+    for svg in (ext / "icons").glob("*.svg"):
+        subprocess.run(["rsvg-convert", "-w", "96", "-o", str(svg.with_suffix(".png"))], check=True,
+                       input=svg.read_text().replace("currentColor", f"#{colors(brand)['secondary']}").encode())
 
 
 def write_extension(cfg, ext):
     """Quarto format extension: `format: <name>-pptx | <name>-beamer | <name>-revealjs` in a deck."""
     shutil.copy(HERE / "charter.lua", ext / "charter.lua")
+    shutil.copy(HERE / "links.lua", ext / "links.lua")
     shutil.copy(HERE / "components.scss", ext / "components.scss")
     shutil.copytree(HERE / "vendor" / "pointer", ext / "pointer")
     spec = {
@@ -433,7 +451,7 @@ def write_extension(cfg, ext):
         "author": "ag-slides charter.py (generated, do not edit)",
         "quarto-required": ">=1.6.0",
         "contributes": {"formats": {
-            "common": {"filters": ["charter.lua"]},
+            "common": {"filters": ["links.lua", "charter.lua"]},
             # deck-local reference doc: the pre-render step writes it with the deck footer filled
             "pptx": {"reference-doc": "_reference.pptx"},
             # no embed-resources: Quarto refuses chalkboard in self-contained output (slides.html + slides_files/)
@@ -466,6 +484,7 @@ def build(cdir):
     write_beamer(cfg, brand, geo, ext)
     write_scss(cfg, brand, geo, ext)
     write_extension(cfg, ext)
+    write_icons(brand, ext)
     (out / "geometry.yml").write_text(yaml.safe_dump(geo, sort_keys=False))
     print(f"charter {cfg['name']} built in {out}")
 
@@ -522,6 +541,7 @@ def deck(cdir, ddir):
     hook(proj, "pre-render", f"uv run {script.parent / 'diagram.py'}", "diagram.py")
     # pptx: tiles, cards and steps redrawn as shapes after pandoc (pptx_components.py)
     hook(proj, "post-render", f"uv run {script.parent / 'pptx_components.py'}", "pptx_components.py")
+    hook(proj, "post-render", f"uv run {script.parent / 'pptx_links.py'}", "pptx_links.py")
     conf["charter"] = str(cdir)
     q.write_text(yaml.safe_dump(conf, sort_keys=False))
     print(f"{cfg['name']} extension installed in {dst}; formats: {cfg['name']}-pptx, {cfg['name']}-beamer, {cfg['name']}-revealjs")

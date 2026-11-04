@@ -94,6 +94,17 @@ for i, h in enumerate(heads):
     if words > WORDS[0] and not re.search(r"!\[|\{python\}|<iframe|\.svg|\.png", raw):
         findings.append(("MEDIUM", where, "dense slide with no figure"))
 
+links = a.qmd.parent / "links.yml"
+if links.exists():
+    norm = lambda t: re.sub(r"\s*\{.*\}\s*$", "", t).replace("\u2019", "'").strip()
+    titles = {norm(h.group(2)) for h in heads}
+    for title, items in yaml.safe_load(links.read_text()).items():
+        if norm(title) not in titles:
+            findings.append(("HIGH", "links.yml", f"no slide titled {title!r}: its links would be dropped"))
+        for kind, *_ in items:
+            if kind not in ("git", "data", "info", "ref"):
+                findings.append(("HIGH", "links.yml", f"{title!r}: unknown kind {kind!r}"))
+
 minutes = a.minutes or fm.get("duration")
 if minutes and content > minutes / MIN_PER_SLIDE:
     findings.append(("HIGH", "deck", f"{content} content slides for {minutes:g} min (max {int(minutes / MIN_PER_SLIDE)})"))
