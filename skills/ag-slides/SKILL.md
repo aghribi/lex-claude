@@ -67,7 +67,7 @@ format:
   <P>-revealjs: default
 ```
 
-Slide roles: `#` section divider, `##` content, `## Title {.plain}` plain background. One block per slide: a list or a table, never both, and no text after a table (pptx moves it to an extra slide). Tables: at most 4 columns, 7 rows, about 10 words per cell. Details that do not fit go in `::: {.notes}`. Two columns: `:::: {.columns}` with two `::: {.column}`. Speaker notes: `::: {.notes}`. Figures: files in `figures/` (draw.io sources next to the export); numbers on slides come from code or a cited source, never typed from memory.
+Every deck gets a "Contents" slide after the title, generated from the `#` and `##` headings by `charter.lua`: never write one by hand. Slide roles: `#` section divider, `##` content, `## Title {.plain}` plain background. One block per slide: a list or a table, never both, and no text after a table (pptx moves it to an extra slide). Tables: at most 4 columns, 7 rows, about 10 words per cell. Details that do not fit go in `::: {.notes}`. Two columns: `:::: {.columns}` with two `::: {.column}`. Speaker notes: `::: {.notes}`. Figures: files in `figures/` (draw.io sources next to the export); numbers on slides come from code or a cited source, never typed from memory.
 
 Re-run `charter.py deck` after every charter rebuild.
 

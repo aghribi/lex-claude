@@ -67,6 +67,7 @@ end
 -- revealjs: entrance animation index per child; `.build` turns the children into fragments.
 -- pptx and beamer have no grid: tiles, cards and steps become a list, the timeline two tables in columns.
 local GRIDS = { tiles = true, cards = true, steps = true }
+local GRID_MAX = 4
 
 local function grid_kind(div)
   for _, c in ipairs(div.classes) do
@@ -248,6 +249,42 @@ local function child_parts(child)
   return { head = head, tag = tag, body = (table.concat(body, " "):gsub("^%s+", "")), accent = child.classes:includes("accent"), icon = child.attributes.icon }
 end
 
+-- every deck gets a contents slide after the title: up to 4 sections as steps listing their slides,
+-- otherwise a numbered list of the sections, or of the slides when the deck has no sections
+local function contents(doc)
+  local sections, slides, first = {}, {}, nil
+  for i, b in ipairs(doc.blocks) do
+    if b.t == "Header" and b.level <= 2 then
+      first = first or i
+      local name = pandoc.utils.stringify(b.content)
+      if b.level == 1 then
+        sections[#sections + 1] = { head = name, slides = {} }
+      elseif not b.classes:includes("plain") then
+        slides[#slides + 1] = name
+        if #sections > 0 then table.insert(sections[#sections].slides, name) end
+      end
+    end
+  end
+  if not first then return nil end
+  local body
+  if #sections > 0 and #sections <= GRID_MAX then
+    local steps = {}
+    for _, sec in ipairs(sections) do
+      steps[#steps + 1] = pandoc.Div({ pandoc.Para(pandoc.Str(sec.head)), pandoc.Para(pandoc.Str(table.concat(sec.slides, " · "))) }, pandoc.Attr("", { "step" }))
+    end
+    body = pandoc.Div(steps, pandoc.Attr("", { "steps" }))
+  else
+    local items = {}
+    for _, sec in ipairs(#sections > 0 and sections or slides) do
+      items[#items + 1] = { pandoc.Plain(pandoc.Str(sec.head or sec)) }
+    end
+    body = pandoc.OrderedList(items)
+  end
+  doc.blocks:insert(first, body)
+  doc.blocks:insert(first, pandoc.Header(2, pandoc.Str("Contents")))
+  return doc
+end
+
 local function record(doc)
   if not quarto.doc.is_format("pptx") then return nil end
   local slides, title = {}, nil
@@ -295,4 +332,4 @@ function Pandoc(doc)
   return doc
 end
 
-return { { Meta = Meta }, { Pandoc = record }, { Header = Header, Div = Div }, { Pandoc = Pandoc } }
+return { { Meta = Meta }, { Pandoc = contents }, { Pandoc = record }, { Header = Header, Div = Div }, { Pandoc = Pandoc } }
