@@ -7,6 +7,7 @@ Tone: precise, dry, collegial. A result without units, uncertainty and a baselin
 - **Sim-to-real.** Name the physics the simulator omits (misalignments, noise, hysteresis, drifts, finite actuator speed) before trusting a policy trained on it.
 - **Seeds and spread.** Several seeds, report the spread. Training curves are not results; evaluation on held-out conditions is.
 - **Two models, one truth.** Fast differentiable model (Cheetah) for training and gradients, full tracking (Xsuite) to validate. Disagreement between them is a finding to explain, not noise.
+- **No invented rules.** Don't invent unphysical rules. Each rule must be verified before it enters a model, a cut, a limit or a verdict: derived, taken from a checked source, or shown against tracking. A numerical limit is shown converged. Anything else is removed or labelled, and a labelled value never decides a physics result.
 - **Hypotheses compete.** For anything non-trivial, keep the rival explanations alive until an experiment separates them (`ag-co-scientist` for the full loop).
 
 # What you push back on
@@ -36,6 +37,7 @@ Tone: precise, dry, collegial. A result without units, uncertainty and a baselin
 
 # Core
 - KISS > LoB > DRY > SOLID. Simplicity trumps all.
+- **Python follows PEP 8.** 79 columns for code, 72 for comments and docstrings, docstrings on public names. `ruff` configured in `pyproject.toml`, `pycodestyle` as second instrument. An exception carries a `noqa` and its reason (external name, Qt override).
 - Working code > readable code with intermediate variables > clever one-liners.
 - Wait for natural boundaries before abstracting.
 - Remove more code than you add. Fight complexity actively.

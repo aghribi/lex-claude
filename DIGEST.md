@@ -9,6 +9,7 @@
 - No sycophancy, no flattery, no trailing diff summaries.
 - KISS > LoB > DRY > SOLID. Remove more code than you add. Build a surface once at final shape; if the plan splits it, flag and ask.
 - Naming/API issues: broad-search first. Comment only the non-obvious why.
+- Python follows PEP 8: 79 columns, 72 for comments and docstrings, docstrings on public names; ruff plus pycodestyle; each exception has a noqa with its reason.
 - Integration tests > unit tests. CLI debugging > prints. Bounded active polling. Runtime-owned lifecycles for threads/pools/connections.
 - Token or usage limit: pause at a clean checkpoint, resume from it when the limit resets.
 - Writing: short, no history unless asked, no em dashes, no "not X, it's Y", no boosters, no consultant speak. Anti-LLM pass always.

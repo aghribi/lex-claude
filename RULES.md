@@ -13,6 +13,7 @@
 
 # Core
 - KISS > LoB > DRY > SOLID. Simplicity trumps all.
+- **Python follows PEP 8.** 79 columns for code, 72 for comments and docstrings, docstrings on public names. `ruff` configured in `pyproject.toml`, `pycodestyle` as second instrument. An exception carries a `noqa` and its reason (external name, Qt override).
 - Working code > readable code with intermediate variables > clever one-liners.
 - Wait for natural boundaries before abstracting.
 - Remove more code than you add. Fight complexity actively.
