@@ -89,6 +89,7 @@ ag claude [--fast|--verify] [args]                 # cold-start check, cached pe
 ag codex [--lite|--full] [prompt]                  # launch Codex with lex-claude context preloaded
 ag codex --print [--lite|--full] [prompt]          # inspect the generated Codex prompt without launching
 ag rag <command> [args]                            # ag-rag indexer: search, stats, update, index, embed, init
+ag sessions [terms...] [-n N]                      # find sessions across all projects by their prompts: date, folder, resume command
 ag usage                                           # report which commands + skills get used; never-used = debloat candidates
 ag doctor                                          # check symlinks, hook, skills, PATH (auto-fixes ~/.zshrc / ~/.bashrc)
 ag -help | -h | --help | help                      # all variants

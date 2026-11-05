@@ -95,6 +95,7 @@ Usage:
   lex-claude init zsh|bash                           Output shell completion. Add to rc: eval "\$(ag init zsh)".
   lex-claude init claude                             Print the context the SessionStart hook loads into Claude Code.
   lex-claude rag <command> [args...]                 Run the ag-rag indexer (search, stats, update, index, embed, init). See 'ag rag --help'.
+  lex-claude sessions [terms...] [-n N]              Find sessions across all projects by their prompts; prints date, folder and resume command.
   lex-claude usage                                   Report which commands/skills get used (and which never do). Debloat aid.
   lex-claude journal init|show|check|all|root        Per-project journal in <project>/_journal/ (STATUS, RESULTS, session notes). Injected at SessionStart only inside that project.
   lex-claude doctor             Sanity-check the install.
@@ -1199,6 +1200,7 @@ _ag() {
     'claude:launch Claude Code with a verified cold-start (master pre-flight)'
     'init:shell completion + context dump'
     'rag:ag-rag indexer (search, stats, update)'
+    'sessions:find sessions across all projects'
     'usage:report used / never-used commands + skills'
     'doctor:sanity-check the install'
     'version:print install version'
@@ -1246,7 +1248,7 @@ _ag() {
   local cur prev cmds
   cur="${COMP_WORDS[COMP_CWORD]}"
   prev="${COMP_WORDS[COMP_CWORD-1]}"
-  cmds="install update identity rules model lang skip brand github-login awake codex claude init rag usage doctor version"
+  cmds="install update identity rules model lang skip brand github-login awake codex claude init rag sessions usage doctor version"
   case "$prev" in
     ag|lex-claude) COMPREPLY=( $(compgen -W "$cmds" -- "$cur") ) ;;
     install)       COMPREPLY=( $(compgen -W "--yes --pkg-only" -- "$cur") ) ;;
@@ -1301,6 +1303,7 @@ Available subcommands (run with `ag <cmd>`):
 - `rag search "<query>" [-k 8] [--scope S]`    hybrid search over the user's indexed documents
 - `rag stats`                                 index counts and freshness
 - `rag update|index|embed [--scope S] [--prune] [--minutes M]`  refresh the index (one run at a time)
+- `sessions [terms...] [-n N]`                find sessions across all projects by their prompts: date, folder, resume command
 - `usage`                                     report which commands + skills get used (never-used = debloat candidates)
 - `doctor`                                    sanity-check the install
 - `update`                                    pull latest + redeploy
@@ -1462,6 +1465,14 @@ cmd_usage() {
   [ -x "$script" ] || script="$INSTALL_DIR/usage.sh"
   [ -x "$script" ] || die "usage.sh not found (run 'ag update')"
   bash "$script" report
+}
+
+cmd_sessions() {
+  local script="$SELF_DIR/tools/ag-sessions/ag_sessions.py"
+  [ -f "$script" ] || script="$INSTALL_DIR/tools/ag-sessions/ag_sessions.py"
+  [ -f "$script" ] || die "ag_sessions.py not found (run 'ag update')"
+  command -v uv >/dev/null 2>&1 || die "uv not found"
+  exec uv run -q --no-project "$script" "$@"
 }
 
 cmd_rag() {
@@ -1671,7 +1682,7 @@ if [ "$(basename "$0")" = "$BRAND_CMD" ]; then
 fi
 
 case "${1:-}" in
-  install|update|__deploy|identity|rules|model|lang|skip|brand|version|github-login|awake|codex|claude|init|rag|doctor|usage|-v|--version|-h|-help|--help|help|"") ;;
+  install|update|__deploy|identity|rules|model|lang|skip|brand|version|github-login|awake|codex|claude|init|rag|sessions|doctor|usage|-v|--version|-h|-help|--help|help|"") ;;
   *) auto_update "$@" ;;
 esac
 
@@ -1706,6 +1717,7 @@ case "${1:-}" in
   init)         shift; cmd_init "$@" ;;
   doctor)       shift; cmd_doctor "$@" ;;
   rag)          shift; cmd_rag "$@" ;;
+  sessions)     shift; cmd_sessions "$@" ;;
   usage)        shift; cmd_usage "$@" ;;
   journal)      shift; bash "$INSTALL_DIR/journal.sh" "$@" ;;
   version|-v|--version) cmd_version ;;
