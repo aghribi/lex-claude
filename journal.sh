@@ -3,7 +3,8 @@
 # sessions/). Local to the project: the SessionStart hook injects STATUS.md only
 # when the session runs inside a project that has a journal; nothing otherwise.
 #
-#   journal.sh start          SessionStart hook: STATUS.md (capped) + last session notes
+#   journal.sh start          SessionStart hook: STATUS.md (capped) + last session notes,
+#                             then the open tasks of the folder's project (ag task)
 #   journal.sh root [dir]     print the project folder holding _journal/ (nearest ancestor)
 #   journal.sh init [dir]     create <dir>/_journal from the template (dir: default cwd)
 #   journal.sh show           print STATUS.md of the current project
@@ -11,7 +12,8 @@
 #   journal.sh all [root]     one line per journaled project under root
 #                             (default $AG_WORKSPACE or ~/Documents/work_space)
 #
-# Cap: LEX_CLAUDE_JOURNAL_LINES (default 120 lines of STATUS.md injected).
+# Cap: LEX_CLAUDE_JOURNAL_LINES (default 120 lines of STATUS.md injected),
+# LEX_CLAUDE_TASK_LINES (default 10 open tasks).
 # Kill switch: LEX_CLAUDE_DISABLE=1.
 
 [ "${LEX_CLAUDE_DISABLE:-}" = "1" ] && exit 0
@@ -39,14 +41,19 @@ last_sessions() {   # $1 = journal dir, $2 = count
 
 case "${1:-}" in
   start)
-    r=$(root_of "${CLAUDE_PROJECT_DIR:-$PWD}") || exit 0
-    j="$r/_journal"; n=$(wc -l < "$j/STATUS.md" | tr -d ' ')
-    printf '\n===== project journal: %s (%s/_journal) =====\n' "$(basename "$r")" "$r"
-    head -n "$CAP" "$j/STATUS.md"
-    [ "$n" -gt "$CAP" ] && printf '\n[STATUS.md has %s lines, over the %s-line cap: shown cut. Trim it at the next close.]\n' "$n" "$CAP"
-    s=$(last_sessions "$j" 3)
-    [ -n "$s" ] && printf '\nLast session notes (sessions/, read on demand):\n%s\n' "$(printf '%s\n' "$s" | sed 's/^/- /')"
-    printf '\nThis project keeps a journal: update STATUS.md when a task ends, a result or a decision lands, or an issue appears; results go to RESULTS.md with their evidence; write a session note at close or handoff. Rules: _journal/README.md.\n'
+    if r=$(root_of "${CLAUDE_PROJECT_DIR:-$PWD}"); then
+      j="$r/_journal"; n=$(wc -l < "$j/STATUS.md" | tr -d ' ')
+      printf '\n===== project journal: %s (%s/_journal) =====\n' "$(basename "$r")" "$r"
+      head -n "$CAP" "$j/STATUS.md"
+      [ "$n" -gt "$CAP" ] && printf '\n[STATUS.md has %s lines, over the %s-line cap: shown cut. Trim it at the next close.]\n' "$n" "$CAP"
+      s=$(last_sessions "$j" 3)
+      [ -n "$s" ] && printf '\nLast session notes (sessions/, read on demand):\n%s\n' "$(printf '%s\n' "$s" | sed 's/^/- /')"
+      printf '\nThis project keeps a journal: update STATUS.md when a task ends, a result or a decision lands, or an issue appears; results go to RESULTS.md with their evidence; write a session note at close or handoff. Rules: _journal/README.md.\n'
+    fi
+    tl="${LEX_CLAUDE_TASK_LINES:-10}"; case "$tl" in *[!0-9]*|"") tl=10 ;; esac
+    command -v uv >/dev/null 2>&1 && [ "$tl" -gt 0 ] \
+      && uv run -q --script "$SELF_DIR/tools/ag-task/ag_task.py" list --here --brief "$tl" 2>/dev/null
+    exit 0
     ;;
 
   root)
@@ -92,7 +99,8 @@ case "${1:-}" in
 
   all)
     base="${2:-${AG_WORKSPACE:-$HOME/Documents/work_space}}"
-    find "$base" -maxdepth 4 -path '*/_journal/STATUS.md' 2>/dev/null | sort | while read -r f; do
+    find "$base" -maxdepth 8 \( -name .git -o -name node_modules -o -name .venv \) -prune \
+      -o -path '*/_journal/STATUS.md' -print 2>/dev/null | sort | while read -r f; do
       p=$(dirname "$(dirname "$f")")
       upd=$(grep -m1 -o '^Updated: [0-9-]*' "$f" | cut -c10-)
       now=$(awk '/^## Now/{f=1; next} /^## /{f=0} f && /^- ./{sub(/^- /,""); print; exit}' "$f")
