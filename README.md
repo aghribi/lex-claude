@@ -90,6 +90,8 @@ ag codex [--lite|--full] [prompt]                  # launch Codex with lex-claud
 ag codex --print [--lite|--full] [prompt]          # inspect the generated Codex prompt without launching
 ag rag <command> [args]                            # ag-rag indexer: search, stats, update, index, embed, init
 ag sessions [terms...] [-n N]                      # find sessions across all projects by their prompts: date, folder, resume command
+ag task add "<text> [#tag] [@project]" [--due D]  # task note in the vault (05_tasks/), project from the folder, session id recorded
+ag task list [-p P|--here] [-t T] [-s S]           # open tasks (open + waiting by default); done|status|show <ref>
 ag usage                                           # report which commands + skills get used; never-used = debloat candidates
 ag doctor                                          # check symlinks, hook, skills, PATH (auto-fixes ~/.zshrc / ~/.bashrc)
 ag -help | -h | --help | help                      # all variants
@@ -280,6 +282,14 @@ State: `~/.claude/lex-claude/state/<slug>/memory.jsonl` (one JSON item per line)
 - **Write:** `/ag-close` and `/ag-succession` write the session note, append results and rewrite STATUS when a journal exists. The succession briefing then carries only what STATUS does not. The injected line asks for STATUS updates at task boundaries, so a session that dies loses little.
 - **Commands:** `ag journal init [dir]` (from `templates/journal/`; new workspace projects get one from `new_item.sh`), `show`, `check` (cap, last update, results without evidence), `all` (one line per journaled project in the workspace), `root`.
 
+## Tasks (one note per task, in the Obsidian vault)
+
+Tasks live in `$AG_VAULT/05_tasks/` (default: the work vault under `$AG_WORKSPACE`), one Markdown note each, readable and editable in Obsidian. Frontmatter: `type: task`, `status` (open, waiting, done), `project`, `tags`, `created`, `due`, `source` (session, email, manual), `session` and `cwd` (with a resume line in the body), `email` (Message-ID). `05_tasks/projects.yaml` maps each project key to its workspace folders and aliases; an unlisted folder falls back to its item name under the workspace. `05_tasks/Tasks.base` is the Obsidian table view.
+
+- **Add:** `ag task add` or `/ag-task` in a session. `CLAUDE_CODE_SESSION_ID` and the folder give the session and project.
+- **Load:** `journal.sh start` lists the open tasks of the folder's project after the journal, at most `LEX_CLAUDE_TASK_LINES` (default 10).
+- **Email:** `/ag-task-mail` turns flagged emails and "To Do" mailboxes into tasks, one per Message-ID. It needs Full Disk Access for the Apple Mail MCP.
+
 ## Skills included
 
 All custom skills are prefixed `ag-` to avoid drowning in native skills or other plugins. Exception: `ag` itself, which is also the name of the `/ag` slash command.
@@ -291,6 +301,8 @@ All custom skills are prefixed `ag-` to avoid drowning in native skills or other
 - `ag-docs-init`: scaffold the standard `docs/` layout (PHILOSOPHY, CONTEXT, PRINCIPLES, INVARIANTS, OPS, TODO) with empty headers. Skips existing files. Use to bootstrap a project.
 - `ag-docs-cleanup`: audit the project's docs for staleness, archives, dead refs, and duplicates. Reports a punch list, never edits.
 - `ag-succession`: hand this session's work to a fresh, verified successor near the context limit. Persists narrow memory, composes a live briefing, then drives `succeed.sh run` to spawn a successor, have the master verify identity + project understanding, reroll on failure, and stand down once one passes. Triggered automatically by the `Stop` hook past the token threshold; also invokable by hand.
+- `ag-task`: add, list or close a task in the vault store through `ag task`.
+- `ag-task-mail`: turn flagged or "To Do" emails into tasks, read-only on mail.
 - `ag-close`: close a work slice by hand (no successor spawned). Commit/push check, docs-in-step check, and a narrow, repo-specific project-memory update. Use on "on ferme", "wrap up", "c'est bon pour aujourd'hui".
 - `ag-co-scientist`: run a co-scientist loop on a research goal (generate, critique, pairwise-debate ranking, evolve, meta-review) with subagents. Delivers an evidence matrix, ranked hypotheses and discriminating experiments for the user to review.
 - `ag-cheetah`: Cheetah 0.8 conventions, gotchas and RL environment pattern, with `scripts/cheetah_xsuite_check.py` (Cheetah vs Xsuite agree to 1.6e-7 with `drift_kick_drift`).
