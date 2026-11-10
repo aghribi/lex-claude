@@ -6,16 +6,19 @@
 
 Tasks live in $AG_VAULT/05_tasks/ (vault default under $AG_WORKSPACE).
 Each note has frontmatter: type, status, project, tags, created, due,
-source, session, cwd, email. 05_tasks/projects.yaml maps project keys
+source, session, cwd, email, stream, link. 05_tasks/projects.yaml maps
+project keys
 to workspace folders, so a task added from a session gets its project
-from the folder the session runs in.
+from the folder the session runs in. 05_tasks/planner.yaml names the
+work streams and their weekly shares. A note's link says where the task
+comes from: minutes, a deliverable, a URL.
 
 `ag task sync` keeps the notes, the mail tagged todo (notmuch) and a
 Reminders list (kick todo) in step. A thread tagged todo is one note
 named *.mail.md, holding subject, sender and link only. Those notes
 stay out of the session hook and of the ag-rag index. Each note records
 what mail and Reminders said at the last sync (todo_tagged, reminder,
-reminder_done), so a difference tells which side changed.
+reminder_done, reminder_due), so a difference tells which side changed.
 """
 
 import argparse
@@ -27,6 +30,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import unicodedata
 from collections import Counter
 from contextlib import contextmanager
 from datetime import date
@@ -46,6 +50,7 @@ VAULT = Path(
 )
 TASKS = VAULT / "05_tasks"
 REGISTRY = TASKS / "projects.yaml"
+PLANNER = TASKS / "planner.yaml"
 STATUSES = ("open", "waiting", "done")
 FRONT = re.compile(r"\A---\n(.*?)\n---\n?(.*)\Z", re.DOTALL)
 MAIL_SUFFIX = ".mail.md"  # slugify cannot produce the dot
@@ -134,6 +139,21 @@ def find(ref):
     return hits[0]
 
 
+def check_stream(name):
+    """`name` if planner.yaml lists it."""
+    known = {}
+    if PLANNER.exists():
+        known = (yaml.safe_load(PLANNER.read_text()) or {}).get("streams")
+    if name not in (known or {}):
+        sys.exit(f"error: stream '{name}' is not in {PLANNER}")
+    return name
+
+
+def due_value(text):
+    """A date, or "none" to clear it."""
+    return text if text == "none" else date.fromisoformat(text)
+
+
 def slugify(text):
     words = re.sub(r"[^\w\s-]", "", text.lower()).split()
     return "-".join(words[:6])[:50] or "task"
@@ -211,6 +231,10 @@ def cmd_add(args, registry):
     }
     if args.due:
         meta["due"] = args.due
+    if args.stream:
+        meta["stream"] = check_stream(args.stream)
+    if args.link:
+        meta["link"] = args.link
     meta["source"] = args.source or (
         "email" if args.email else "session" if session else "manual"
     )
@@ -229,7 +253,33 @@ def cmd_add(args, registry):
     print(f"added {path.stem} [{project or 'no project'}]")
 
 
-def cmd_list(args, registry):
+def cmd_set(args, registry):
+    """Change fields of a note; the value "none" clears one."""
+    path, meta = find(args.ref)
+    _, body = read(path)
+    changed = []
+    for field in ("due", "stream", "project", "link"):
+        value = getattr(args, field)
+        if value is None:
+            continue
+        changed.append(field)
+        if value == "none":
+            meta.pop(field, None)
+            continue
+        if field == "stream":
+            check_stream(value)
+        elif field == "project":
+            value = resolve_project(value, registry)
+            if registry and value not in registry:
+                print(f"note: project '{value}' is not in {REGISTRY.name}")
+        meta[field] = value
+    if not changed:
+        sys.exit("error: nothing to set")
+    write(path, meta, body)
+    print(f"{path.stem}: set {', '.join(changed)}")
+
+
+def cmd_list(args, registry, sync_error=None):
     project = None
     if args.here:
         cwd = os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd()
@@ -251,6 +301,27 @@ def cmd_list(args, registry):
         and not (args.brief and is_mail(p))
     ]
     rows.sort(key=lambda r: (str(r[1].get("due") or "9999"), r[0].stem))
+    if args.json:
+        fields = (
+            "status", "project", "tags", "due", "stream", "link", "source",
+            "email",
+        )
+        rows = [
+            {
+                "id": p.stem,
+                "title": title_of(p, read(p)[1]),
+                **{k: m.get(k) for k in fields},
+            }
+            for p, m in rows
+        ]
+        print(
+            json.dumps(
+                {"sync_error": sync_error, "tasks": rows},
+                ensure_ascii=False,
+                default=str,
+            )
+        )
+        return
     if args.brief:
         if not rows:
             return
@@ -262,6 +333,8 @@ def cmd_list(args, registry):
         flags = [meta["status"]] if meta["status"] != "open" else []
         if meta.get("due"):
             flags.append(f"due {meta['due']}")
+        if meta.get("stream"):
+            flags.append(meta["stream"])
         flags += [f"#{t}" for t in meta.get("tags") or []]
         where = "" if project else f"[{meta.get('project') or '-'}] "
         extra = f"  ({oneline(', '.join(flags))})" if flags else ""
@@ -347,6 +420,12 @@ def kick_todo(action, payload):
     return json.loads(out)
 
 
+def name_key(name):
+    """Comparable file name: the file system and a reminder's link may
+    hold the same accents in different Unicode forms."""
+    return unicodedata.normalize("NFC", name)
+
+
 def is_mail(path):
     return path.name.endswith(MAIL_SUFFIX)
 
@@ -360,7 +439,7 @@ def linked_note(reminder):
     in the notes too: only those are sure to survive other devices."""
     text = f"{reminder.get('url') or ''} {reminder.get('notes') or ''}"
     match = LINK.search(text)
-    return unquote(match[1]) if match else None
+    return name_key(unquote(match[1])) if match else None
 
 
 def mail_project(tags, registry):
@@ -470,18 +549,27 @@ def sync_note(path, meta, live, reminder, seen_reminders):
     if seen_reminders is not None:
         if reminder:
             title = oneline(title_of(path, body))
+            theirs = (reminder.get("due") or "")[:10]
+            if theirs != str(meta.get("reminder_due") or ""):
+                # set or cleared on another device since the last sync
+                meta.pop("due", None)
+                if theirs:
+                    meta["due"] = date.fromisoformat(theirs)
             due = str(meta.get("due") or "")
             change = {}
             if reminder["completed"] != done:
                 change["completed"] = done
             if not done and reminder["title"] != title:
                 change["title"] = title
-            if not done and (reminder.get("due") or "")[:10] != due:
+            if not done and theirs != due:
                 change["due"] = due
             if change:
                 kick_todo("update", {"id": reminder["id"], **change})
                 stats["reminders"] += 1
             meta["reminder_done"] = done
+            meta.pop("reminder_due", None)
+            if due:
+                meta["reminder_due"] = due
         elif not done and not meta.get("reminder"):
             payload = {
                 "title": oneline(title_of(path, body)),
@@ -491,6 +579,7 @@ def sync_note(path, meta, live, reminder, seen_reminders):
             }
             if meta.get("due"):
                 payload["due"] = str(meta["due"])
+                meta["reminder_due"] = str(meta["due"])
             kick_todo("add", payload)
             meta["reminder"] = True
             meta["reminder_done"] = False
@@ -520,7 +609,7 @@ def sync(registry):
 
     by_note = {}
     if reminders is not None:
-        names = {p.name for p, _ in tasks()}
+        names = {name_key(p.name) for p, _ in tasks()}
         for reminder in reminders:
             name = linked_note(reminder)
             if name in names:
@@ -534,14 +623,14 @@ def sync(registry):
                     continue  # someone's own link, not ours to replace
                 path = note_from_reminder(reminder, registry)
                 if path:
-                    by_note[path.name] = reminder
+                    by_note[name_key(path.name)] = reminder
                     stats["new from reminders"] += 1
 
     # An empty list says nothing about deletions: never close on it.
     for path, meta in tasks():
         before = dict(meta)
         body, changes = sync_note(
-            path, meta, live, by_note.get(path.name), reminders
+            path, meta, live, by_note.get(name_key(path.name)), reminders
         )
         stats.update(changes)
         if meta != before:
@@ -550,11 +639,14 @@ def sync(registry):
 
 
 def try_sync(registry):
-    """Sync after a command, whose own work is already saved."""
+    """Sync after a command, whose own work is already saved. Returns
+    the failure, for those who must not report stale data as current."""
     try:
         sync(registry)
     except SyncError as exc:
         print(f"warning: sync failed: {exc}", file=sys.stderr)
+        return str(exc)
+    return None
 
 
 @contextmanager
@@ -593,8 +685,11 @@ def main():
     p.add_argument("--due", type=date.fromisoformat,
                    help="YYYY-MM-DD")
     p.add_argument("--note", help="extra line under the title")
+    p.add_argument("--stream", help="a stream of planner.yaml")
+    p.add_argument("--link", help="where the task comes from")
     p.add_argument("--source",
-                   choices=("session", "email", "reminder", "manual"))
+                   choices=("session", "email", "reminder", "manual",
+                            "minutes", "deliverable"))
     p.add_argument("--email", help="Message-ID of the linked email")
 
     p = sub.add_parser("list", help="list tasks")
@@ -607,6 +702,15 @@ def main():
                    help="open includes waiting (default)")
     p.add_argument("--brief", type=int, default=0, metavar="N",
                    help="hook format, at most N lines")
+    p.add_argument("--json", action="store_true",
+                   help="tasks and any sync failure as JSON")
+
+    p = sub.add_parser("set", help='change fields ("none" clears one)')
+    p.add_argument("ref", help="part of the task file name")
+    p.add_argument("--due", type=due_value, help="YYYY-MM-DD or none")
+    p.add_argument("--stream", help="a stream of planner.yaml, or none")
+    p.add_argument("-p", "--project")
+    p.add_argument("--link")
 
     p = sub.add_parser("done", help="mark a task done")
     p.add_argument("ref", help="part of the task file name")
@@ -628,11 +732,12 @@ def main():
             if args.cmd == "sync":
                 cmd_sync(registry)
             elif args.cmd == "list":
-                try_sync(registry)
-                cmd_list(args, registry)
+                cmd_list(args, registry, try_sync(registry))
             else:
                 if args.cmd == "add":
                     cmd_add(args, registry)
+                elif args.cmd == "set":
+                    cmd_set(args, registry)
                 else:
                     value = args.value if args.cmd == "status" else "done"
                     cmd_status(args.ref, value)
