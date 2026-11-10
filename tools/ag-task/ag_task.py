@@ -302,6 +302,9 @@ def cmd_list(args, registry, sync_error=None):
     ]
     rows.sort(key=lambda r: (str(r[1].get("due") or "9999"), r[0].stem))
     if args.json:
+        planner = (
+            yaml.safe_load(PLANNER.read_text()) if PLANNER.exists() else None
+        )
         fields = (
             "status", "project", "tags", "due", "stream", "link", "source",
             "email",
@@ -316,7 +319,7 @@ def cmd_list(args, registry, sync_error=None):
         ]
         print(
             json.dumps(
-                {"sync_error": sync_error, "tasks": rows},
+                {"sync_error": sync_error, "tasks": rows, "planner": planner},
                 ensure_ascii=False,
                 default=str,
             )
