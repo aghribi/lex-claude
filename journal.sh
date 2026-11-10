@@ -51,8 +51,13 @@ case "${1:-}" in
       printf '\nThis project keeps a journal: update STATUS.md when a task ends, a result or a decision lands, or an issue appears; results go to RESULTS.md with their evidence; write a session note at close or handoff. Rules: _journal/README.md.\n'
     fi
     tl="${LEX_CLAUDE_TASK_LINES:-10}"; case "$tl" in *[!0-9]*|"") tl=10 ;; esac
-    command -v uv >/dev/null 2>&1 && [ "$tl" -gt 0 ] \
-      && uv run -q --script "$SELF_DIR/tools/ag-task/ag_task.py" list --here --brief "$tl" 2>/dev/null
+    command -v uv >/dev/null 2>&1 && [ "$tl" -gt 0 ] && {
+      # In the background: a session start must not wait on mail or Reminders.
+      (umask 077; mkdir -p "$HOME/.cache"
+       nohup uv run -q --script "$SELF_DIR/tools/ag-task/ag_task.py" sync \
+         >/dev/null 2>>"$HOME/.cache/ag-task-sync.log" &)
+      uv run -q --script "$SELF_DIR/tools/ag-task/ag_task.py" list --here --brief "$tl" 2>/dev/null
+    }
     exit 0
     ;;
 

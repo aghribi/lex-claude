@@ -39,7 +39,7 @@ DIM = 1024  # bge-m3
 # Never indexed, whatever the config says.
 HARD_EXCLUDE_DIRS = {"keepass_vault", "ssh_vault", ".ssh", ".gnupg"}
 HARD_EXCLUDE_FILES = re.compile(
-    r"(recovery[-_]codes|id_rsa|id_ed25519|\.kdbx$|\.pem$|\.key$|^\.env|secret|password|passwd)", re.I
+    r"(recovery[-_]codes|id_rsa|id_ed25519|\.kdbx$|\.pem$|\.key$|^\.env|secret|password|passwd|\.mail\.md$)", re.I
 )
 
 DEFAULT_CONFIG = """\

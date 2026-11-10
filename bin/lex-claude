@@ -99,7 +99,7 @@ Usage:
   lex-claude init claude                             Print the context the SessionStart hook loads into Claude Code.
   lex-claude rag <command> [args...]                 Run the ag-rag indexer (search, stats, update, index, embed, init). See 'ag rag --help'.
   lex-claude sessions [terms...] [-n N]              Find sessions across all projects by their prompts; prints date, folder and resume command.
-  lex-claude task add|list|done|status|show [args]   Tasks as notes in the Obsidian vault (05_tasks/), with project, tags and the session that set them. See 'ag task --help'.
+  lex-claude task add|list|done|status|show|sync [args]   Tasks as notes in the Obsidian vault (05_tasks/), with project, tags and the session that set them, synced with mail tagged todo and the Reminders list "ag tasks". See 'ag task --help'.
   lex-claude usage                                   Report which commands/skills get used (and which never do). Debloat aid.
   lex-claude journal init|show|check|all|root        Per-project journal in <project>/_journal/ (STATUS, RESULTS, session notes). Injected at SessionStart only inside that project.
   lex-claude doctor             Sanity-check the install.
@@ -1205,7 +1205,7 @@ _ag() {
     'init:shell completion + context dump'
     'rag:ag-rag indexer (search, stats, update)'
     'sessions:find sessions across all projects'
-    'task:tasks in the vault (add, list, done, status, show)'
+    'task:tasks in the vault (add, list, done, status, show, sync)'
     'journal:per-project journal (init, show, check, all, root)'
     'usage:report used / never-used commands + skills'
     'doctor:sanity-check the install'
@@ -1313,6 +1313,7 @@ Available subcommands (run with `ag <cmd>`):
 - `task add "<text> [#tag] [@project]" [--due D]`  add a task note in the vault (05_tasks/); project from the folder, session id recorded
 - `task list [-p P|--here] [-t T] [-s S]`     open tasks (open + waiting by default)
 - `task done|show <ref>`, `task status <ref> open|waiting|done`  ref = part of the task file name
+- `task sync`  sync notes, mail tagged todo and the Reminders list "ag tasks" (also runs after add, done, status, list and at session start)
 - `journal init|show|check|all|root`         per-project journal in <project>/_journal/
 - `usage`                                     report which commands + skills get used (never-used = debloat candidates)
 - `doctor`                                    sanity-check the install
