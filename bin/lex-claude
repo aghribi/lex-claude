@@ -1577,12 +1577,15 @@ cmd_claude() {
   # Interactive hand-over. With `ag brand on` the seat runs behind brand.py;
   # it falls back to the bare binary when brand.py or uv is missing.
   _claude_exec() {
+    # cmux restores only the sessions started through its wrapper, and PATH
+    # order can put the real binary ahead of its shim.
+    local seat="${CMUX_CLAUDE_WRAPPER_SHIM:-}"; [ -x "$seat" ] || seat="$claude_bin"
     local brand="$SELF_DIR/brand.py"; [ -f "$brand" ] || brand="$INSTALL_DIR/brand.py"
     if { [ -f "$BRAND_FILE" ] || [ "$BRAND_FORCE" = 1 ]; } && [ -f "$brand" ] && command -v uv >/dev/null 2>&1; then
-      LEX_CLAUDE_BRAND_NAME="$(_brand_name)" exec uv run -q --no-project python -I "$brand" "$claude_bin" "$@"
+      LEX_CLAUDE_BRAND_NAME="$(_brand_name)" exec uv run -q --no-project python -I "$brand" "$seat" "$@"
     fi
     [ "$BRAND_FORCE" = 1 ] && echo "ag: brand.py or uv missing; launching the stock banner." >&2
-    exec "$claude_bin" "$@"
+    exec "$seat" "$@"
   }
 
   # Only a FRESH interactive seat needs the cold-start check. Pass through
