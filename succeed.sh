@@ -43,6 +43,7 @@
 #   LEX_CLAUDE_HANDOFF_TOKENS   trigger threshold (default 600000)
 #   LEX_CLAUDE_SUCCESSION_MAX   reroll cap (default 3)
 #   LEX_CLAUDE_WATCH_TURNS      successor turns the master + predecessor watch (default 3)
+#   LEX_CLAUDE_PROJECT_NAME     project part of the successor name <project>_successor_<id8> (default: journal folder)
 # Kill switches: LEX_CLAUDE_DISABLE=1, LEX_CLAUDE_HANDOFF_DISABLE=1.
 # Needs jq. Reuses master.sh (next to this script) as the drift authority.
 
@@ -118,6 +119,20 @@ projects_dir() { printf '%s/.claude/projects/%s' "$HOME" "$(printf '%s' "$1" | s
 # empty prompt and waits for the user; this turn starts the work. Plain text, no
 # quotes or $: it is embedded in the launcher's shell quoting.
 KICKOFF="Resumed after the handover: take over the briefed work now. Start with the opening move you gave, then carry on."
+# First prompt of EVERY resumed successor, ahead of KICKOFF: what the user sees on
+# arrival. Same constraints: plain text, no quotes, $ or backticks.
+OPENER="Opening report, before anything else: a short summary of the project state from the journal STATUS, the actions waiting (Next and Waiting on, saying who acts), and the succession graph: run ag lineage and show the tree it prints."
+
+# Display name of a successor (session title, terminal, cmux): <project>_successor_<id8>.
+# <project> is LEX_CLAUDE_PROJECT_NAME (set per project in .claude/settings.local.json),
+# else the folder holding the project journal, else the working folder.
+successor_name() {
+  local id="$1" dir="$2" project="${LEX_CLAUDE_PROJECT_NAME:-}"
+  [ -n "$project" ] || project=$(bash "$SELF_DIR/journal.sh" root "$dir" 2>/dev/null) || project=""
+  [ -n "$project" ] || project="$dir"
+  project=$(printf '%s' "$(basename "$project")" | tr -c 'A-Za-z0-9@._-' '_')
+  printf '%s_successor_%s' "$project" "$(printf '%s' "${id%%-*}" | tr 'A-Z' 'a-z')"
+}
 
 # Open the verified successor in a NEW terminal window running `claude --resume`.
 # macOS only: cmux (new workspace, via its CLI), iTerm, Terminal.app. cmux is
@@ -128,7 +143,8 @@ KICKOFF="Resumed after the handover: take over the briefed work now. Start with 
 # be ready yet. Failures are reported on stderr, not swallowed — a silent
 # "opened" that did not is worse than a printed resume line.
 open_successor() {
-  local id="$1" dir="$2" kick="${3:+ \"$3\"}" app="" err qdir launcher
+  local id="$1" dir="$2" kick="${3:+ \"$3\"}" app="" err qdir launcher name
+  name=$(successor_name "$id" "$dir")
   launcher="$WATCH_DIR/$id.launch"   # separate line: `local a=$1 b=$a` expands $a before a is set
   case "$(uname -s 2>/dev/null)" in Darwin) ;; *) echo "   open: not macOS, no auto-open" >&2; return 1 ;; esac
   case "${TERM_PROGRAM:-}" in
@@ -150,7 +166,7 @@ open_successor() {
     # so predecessor and successor run in the same mode (cross-session messages
     # between different permission modes are held for approval). Raw claude if
     # ag is not on PATH.
-    printf "cd '%s' && exec /bin/zsh -lic 'if command -v ag >/dev/null 2>&1; then ag claude --resume %s%s; else claude --resume %s%s; fi'\n" "$qdir" "$id" "$kick" "$id" "$kick"
+    printf "cd '%s' && exec /bin/zsh -lic 'if command -v ag >/dev/null 2>&1; then ag claude --resume %s --name %s%s; else claude --resume %s --name %s%s; fi'\n" "$qdir" "$id" "$name" "$kick" "$id" "$name" "$kick"
   } > "$launcher" && chmod +x "$launcher" || { echo "   open: cannot write launcher $launcher" >&2; return 1; }
   case "$app" in
     cmux)
@@ -160,7 +176,7 @@ open_successor() {
       local gen="" parent="" desc="successor"
       [ -f "$LINEAGE_DIR/$id" ] && IFS=$'\t' read -r gen parent _ < "$LINEAGE_DIR/$id"
       [ -n "$gen" ] && [ -n "$parent" ] && desc="successor gen$gen ←$(printf '%s' "${parent:0:8}" | tr 'A-Z' 'a-z')"
-      err=$(CMUX_QUIET=1 cmux workspace create --name "successor ${id%%-*}" --description "$desc" \
+      err=$(CMUX_QUIET=1 cmux workspace create --name "$name" --description "$desc" \
         --cwd "$dir" --command "$launcher" --focus true 2>&1) && err="" ;;
     iTerm)
       err=$(osascript 2>&1 >/dev/null <<OSA
@@ -345,8 +361,8 @@ the user outranks both). When it tells you it is standing down, carry on alone."
       fi
       echo "SUCCESSOR_OK $uuid"
       [ -n "$id_warn" ] && echo "$id_warn"
-      kick=""; [ -n "$briefing_file" ] && kick="$KICKOFF"
-      echo "successor verified + grounded — resume with:  claude --resume $uuid${kick:+ \"$kick\"}"
+      kick="$OPENER Then wait for the user."; [ -n "$briefing_file" ] && kick="$OPENER Then: $KICKOFF"
+      echo "successor verified + grounded — resume with:  claude --resume $uuid --name $(successor_name "$uuid" "$PWD") \"$kick\""
       [ -f "$WATCH_DIR/$uuid.left" ] && echo "master watch armed: its first $WATCH turns are judged against the briefing (log: $WATCH_DIR/$uuid.log)."
       [ -n "$from_peer" ] && echo "tutelle: peek with Monitor on:  succeed.sh peek $uuid   (read each finished turn with:  succeed.sh turn $uuid)"
       if [ "$do_open" = "1" ]; then
