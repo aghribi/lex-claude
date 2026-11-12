@@ -3,9 +3,9 @@ name: ag-voice
 description: Write in the user's own voice (A. Ghribi, accelerator physics, cryogenics, AI for accelerators). Use whenever drafting anything signed or submitted in the user's name - EU proposal sections (Part B, WPs, KPIs, impact), papers and technical notes, French institutional writing (HDR, CNRS/DR projects, reports), emails and abstracts. Also on "write this as me", "in my voice", "draft my section", "rédige comme moi".
 ---
 
-The user's voice. One DNA, four registers. Pick the register first, then write.
+The user's voice. One DNA, five registers. Pick the register first, then write.
 
-Ground truth is the corpus listed in the user's `Voice.md` (Obsidian work vault; ask for the path if it is not obvious). The single-author texts carry the voice: the HDR manuscript first, then the user's own sections of EU proposals. Multi-author proposal text is diluted; `projet_recherche_dr_cid55_optimise` shows heavy em-dash use (about 60x the HDR rate) and is treated as AI-polished, not as ground truth. Read the corpus before any long draft; these rules are the distillation. Never copy passages from unpublished proposals into other documents or this repo.
+Ground truth is the corpus listed in the user's `Voice.md` (Obsidian work vault; ask for the path if it is not obvious). The single-author texts carry the voice: the HDR manuscript first, then the user's own sections of EU proposals. Multi-author proposal text is diluted; `projet_recherche_dr_cid55_optimise` shows heavy em-dash use (about 60x the HDR rate) and is treated as AI-polished, not as ground truth. Read the corpus before any long draft; these rules are the distillation. Before any abstract, also read the user's own abstracts (the English abstract of the HDR, earlier talk abstracts in the presentation folders and the work vault): the distillation alone does not give the voice. Never copy passages from unpublished proposals into other documents or this repo.
 
 ## The DNA (every register)
 
@@ -25,7 +25,8 @@ Ground truth is the corpus listed in the user's `Voice.md` (Obsidian work vault;
 | Paper / technical note (EN) | Journals, conference proceedings, internal notes | Results first, method in the order it was done, "we". Figures and tables carry the numbers; the text says what they show. No storytelling. |
 | EU proposal (EN) | Horizon Europe Part B: excellence, impact, implementation | Structure carries it: WP, Task, Subtask labels, KPIs tagged in brackets (`[KPI 2.1]`), partners by acronym and role. "The project will", "this task will". Sequencers (firstly, secondly, finally) for arguments. One plain memorable line per section at most. Every impact claim tied to a KPI, a deliverable or a facility. British spelling (organisation, utilisation). |
 | French institutional (FR) | HDR, CNRS/DR applications, activity reports | Narrative and chronological, dated ("dès juillet 2016"). "Nous" for team work, "je" for own initiatives, coordination and the personal arc. Plain idioms allowed sparingly ("qu'à cela ne tienne"), understatement over enthusiasm. Passé composé and imparfait for the story, present for the state of things. |
-| Email / short form | Collaborators, EU officers, admin, abstracts | See **Email register** below. Abstracts follow the paper register in 150 to 250 words. |
+| Talk abstract (EN or FR) | Seminars, workshops, invited talks | A narrative, never an inventory of projects and numbers. Open on a question or a concrete scene, build a tension, turn it, end on what is still open or what the audience can do. One or two images or plain idioms are welcome. One or two telling episodes (a mistake caught, a surprise) replace the list of figures. 150 to 250 words. Abstracts of conference papers (IPAC and the like) stay in the paper register. |
+| Email / short form | Collaborators, EU officers, admin | See **Email register** below. |
 
 ## Email register
 
