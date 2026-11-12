@@ -175,7 +175,7 @@ def svg_prim(p, faces, live):
         return out
     if p["p"] == "image":
         path = pathlib.Path(p["path"] if live else p["poster"])
-        mime = "gif" if path.suffix.lower() == ".gif" else "png"
+        mime = {".gif": "gif", ".jpg": "jpeg", ".jpeg": "jpeg"}.get(path.suffix.lower(), "png")
         data = base64.b64encode(path.read_bytes()).decode()
         return f'<image x="{p["x"]:.1f}" y="{p["y"]:.1f}" width="{p["w"]:.1f}" height="{p["h"]:.1f}" href="data:image/{mime};base64,{data}"/>'
     # para

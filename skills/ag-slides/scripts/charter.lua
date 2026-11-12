@@ -43,11 +43,15 @@ function Meta(meta)
     attrs["data-background-size"] = attrs["data-background-size"] or "contain"
     meta["title-slide-attributes"] = attrs
   elseif quarto.doc.is_format("beamer") then
+    -- the deck's own title cover, as in revealjs and pptx
+    local tsa = meta["title-slide-attributes"]
+    local title_bg = tsa and tsa["data-background-image"] and pandoc.utils.stringify(tsa["data-background-image"])
     quarto.doc.include_text("in-header", table.concat({
       "\\def\\brandbgdir{" .. bg .. "}",
       "\\usepackage{" .. quarto.utils.resolve_path("beamerthemecharter") .. "}",
       "\\renewcommand\\brandfooter{" .. footer .. "}",
       eyebrow and ("\\def\\brandeyebrow{" .. tex_esc(eyebrow) .. "}") or "",
+      title_bg and ("\\def\\brandtitlebg{" .. title_bg .. "}") or "",
     }, "\n"))
   end
   return meta
@@ -249,8 +253,9 @@ local function child_parts(child)
   return { head = head, tag = tag, body = (table.concat(body, " "):gsub("^%s+", "")), accent = child.classes:includes("accent"), icon = child.attributes.icon }
 end
 
--- every deck gets a contents slide after the title: up to 4 sections as steps listing their slides,
--- otherwise a numbered list of the sections, or of the slides when the deck has no sections
+-- every deck gets a contents slide after the title: up to 4 sections as steps listing their slides
+-- (or the section's `subtitle` attribute), otherwise a numbered list of the sections, or of the slides
+-- when the deck has no sections; `.nocontents` keeps a slide off the list
 local function contents(doc)
   local sections, slides, first = {}, {}, nil
   for i, b in ipairs(doc.blocks) do
@@ -258,8 +263,8 @@ local function contents(doc)
       first = first or i
       local name = pandoc.utils.stringify(b.content)
       if b.level == 1 then
-        sections[#sections + 1] = { head = name, slides = {} }
-      elseif not b.classes:includes("plain") then
+        sections[#sections + 1] = { head = name, slides = {}, subtitle = b.attributes.subtitle }
+      elseif not b.classes:includes("plain") and not b.classes:includes("nocontents") then
         slides[#slides + 1] = name
         if #sections > 0 then table.insert(sections[#sections].slides, name) end
       end
@@ -270,7 +275,7 @@ local function contents(doc)
   if #sections > 0 and #sections <= GRID_MAX then
     local steps = {}
     for _, sec in ipairs(sections) do
-      steps[#steps + 1] = pandoc.Div({ pandoc.Para(pandoc.Str(sec.head)), pandoc.Para(pandoc.Str(table.concat(sec.slides, " · "))) }, pandoc.Attr("", { "step" }))
+      steps[#steps + 1] = pandoc.Div({ pandoc.Para(pandoc.Str(sec.head)), pandoc.Para(pandoc.Str(sec.subtitle or table.concat(sec.slides, " · "))) }, pandoc.Attr("", { "step" }))
     end
     body = pandoc.Div(steps, pandoc.Attr("", { "steps" }))
   else
@@ -291,6 +296,7 @@ local function record(doc)
   for _, b in ipairs(doc.blocks) do
     if b.t == "Header" and b.level <= 2 then
       title = pandoc.utils.stringify(b.content)
+      if b.attributes.logo then slides[#slides + 1] = { title = title, kind = "logo", src = b.attributes.logo } end
     elseif b.t == "Div" and title and b.classes:includes("diagram") then
       slides[#slides + 1] = { title = title, kind = "diagram", src = b.attributes.src }
     elseif b.t == "Div" and title and grid_kind(b) then
@@ -308,6 +314,34 @@ local function record(doc)
   local f = assert(io.open(pandoc.path.join({ dir, "_components.json" }), "w"))
   f:write(pandoc.json.encode(out))
   f:close()
+end
+
+-- `logo="file"` on a slide heading: the image right of the title (box from the template geometry), swapped
+-- with the template mark when the charter has one (backgrounds/mark.*); pptx_components.py places it in pptx
+local function logo(doc)
+  local reveal, tex = quarto.doc.is_format("revealjs"), quarto.doc.is_format("beamer")
+  if not (reveal or tex) then return nil end
+  local mark
+  for _, f in ipairs(pandoc.system.list_directory(bg)) do
+    if f:match("^mark%.") then mark = bg_rel .. "/" .. f end
+  end
+  local out = {}
+  for _, b in ipairs(doc.blocks) do
+    out[#out + 1] = b
+    local src = b.t == "Header" and b.level == 2 and b.attributes.logo
+    if src and reveal then
+      if mark then
+        out[#out + 1] = pandoc.Div({}, pandoc.Attr("", { "brand-cover" }))
+        out[#out + 1] = pandoc.Div(pandoc.Plain({ pandoc.Image({}, mark) }), pandoc.Attr("", { "brand-mark" }))
+      end
+      out[#out + 1] = pandoc.Div(pandoc.Plain({ pandoc.Image({}, src) }), pandoc.Attr("", { "brand-logo" }))
+    elseif src then
+      -- in the frame title: an overlay there takes no space, a block in the frame body pushes the content down
+      b.content:insert(pandoc.RawInline("latex", "\\brandlogo{" .. src .. "}"))
+    end
+  end
+  doc.blocks = out
+  return doc
 end
 
 -- revealjs: close every slide with the footer; a block before a slide heading ends the previous slide
@@ -332,4 +366,4 @@ function Pandoc(doc)
   return doc
 end
 
-return { { Meta = Meta }, { Pandoc = contents }, { Pandoc = record }, { Header = Header, Div = Div }, { Pandoc = Pandoc } }
+return { { Meta = Meta }, { Pandoc = contents }, { Pandoc = record }, { Header = Header, Div = Div }, { Pandoc = logo }, { Pandoc = Pandoc } }

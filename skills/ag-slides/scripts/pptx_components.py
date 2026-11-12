@@ -22,7 +22,7 @@ from pptx.oxml import parse_xml
 from pptx.util import Pt
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from charter import NS, load  # noqa: E402
+from charter import NS, load, logo_box, mark_under, moved_mark  # noqa: E402
 from diagram import ICONS, layers, palette, rasterise  # noqa: E402
 
 TAG = "agc:"
@@ -246,8 +246,9 @@ def draw(slide, comp, body, col, fonts, ddir):
             png = rasterise(ddir, f"{ICONS}/{it['icon']}.svg", color=col["primary"], px=192)
             pa.s.shapes.add_picture(str(png), Pt(x + 14), Pt(ty), Pt(30), Pt(30)).name = TAG + "icon"
             ty += 38
-        head_h = max(1, math.ceil(len(it["head"]) * 0.5 * 19 / (w - 28))) * 19 * 1.2
-        pa.text(x + 14, ty, w - 28, head_h, it["head"], 19, col["primary"], head=True, bold=True)
+        hs = 16 if it.get("icon") else 19
+        head_h = max(1, math.ceil(len(it["head"]) * 0.5 * hs / (w - 28))) * hs * 1.2
+        pa.text(x + 14, ty, w - 28, head_h, it["head"], hs, col["primary"], head=True, bold=True)
         ty += head_h + 7
         if it.get("tag"):
             tw = 0.62 * 9 * len(it["tag"]) + 12
@@ -296,6 +297,29 @@ def title_slide(slide, data, geo, col, fonts):
         Painter(slide, col, fonts).text(t["x"] + 7.2, y, t["w"], 18, data["eyebrow"], 12, mix(col["secondary"], "FFFFFF", 0.75), bold=True, upper=True, spacing=200)
 
 
+def swap_mark(slide, geo, under, ext):
+    """Cover the layout's mark and draw it again below the project logo (`moved_mark`)."""
+    m, mm = geo["content"]["mark"], moved_mark(geo)
+    r = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, Pt(m["x"] - 1), Pt(m["y"] - 1), Pt(m["w"] + 2), Pt(m["h"] + 2))
+    r.fill.solid()
+    r.fill.fore_color.rgb = RGBColor.from_string(under)
+    r.line.fill.background()
+    r.name = TAG + "cover"
+    pic = slide.shapes.add_picture(str(ext / "backgrounds" / m["file"]), Pt(mm["x"]), Pt(mm["y"]), Pt(mm["w"]), Pt(mm["h"]))
+    pic.name = TAG + "mark"
+
+
+def place_logo(slide, src, box):
+    """Logo right-aligned and centred in `box`, aspect kept."""
+    pic = slide.shapes.add_picture(str(src), 0, 0, height=Pt(box["h"]))
+    if pic.width > Pt(box["w"]):
+        pic.height = int(pic.height * Pt(box["w"]) / pic.width)
+        pic.width = Pt(box["w"])
+    pic.left = Pt(box["x"] + box["w"]) - pic.width
+    pic.top = Pt(box["y"] + box["h"] / 2) - pic.height // 2
+    pic.name = TAG + "logo"
+
+
 def template_fonts(prs):
     m = prs.slide_masters[0]._element
     face = lambda style: (m.find(f".//p:txStyles/p:{style}//a:latin", NS).get("typeface"))
@@ -325,6 +349,11 @@ def main(ddir):
             continue
         title = slide.shapes.title.text_frame.text.strip() if slide.shapes.title is not None else ""
         for comp in (c for c in data["slides"] if c["title"] == title):
+            if comp["kind"] == "logo":
+                if "mark" in geo["content"]:
+                    swap_mark(slide, geo, mark_under(cfg, brand), cdir / "build" / "_extensions" / cfg["name"])
+                place_logo(slide, ddir / comp["src"], logo_box(geo))
+                continue
             if comp["kind"] == "diagram":
                 draw_diagram(slide, comp, body, col, fonts, ddir, prs.slide_width / 12700)
             else:

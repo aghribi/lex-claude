@@ -59,7 +59,7 @@ $comp-text: mix($body-color, #ffffff, 78%);  // secondary text: tile labels, car
 // icon above a card title (`icon=` on the card), and `.diagram`: a drawing from diagram.py filling the body box
 .reveal .card .ico, .reveal .step .ico { display: block; color: $brand-primary; margin-bottom: 0.3em; }
 .reveal .card .ico svg, .reveal .step .ico svg { display: block; width: 1.9em; height: 1.9em; }
-.reveal .card > .ico + p, .reveal .step > .ico + p { font-family: $presentation-heading-font; font-weight: 600; font-size: 1.5em; color: $brand-primary; line-height: 1.1; margin-bottom: 0.5em; }
+.reveal .card > .ico + p, .reveal .step > .ico + p { font-family: $presentation-heading-font; font-weight: 600; font-size: 0.9em; color: $brand-primary; line-height: 1.1; margin-bottom: 0.5em; }
 // cards with icons fill the body box, in larger type
 .reveal .slides section.slide.level2 > .cards:has(.ico) { flex: 1 1 auto; max-height: 470px; }
 .reveal .card:has(.ico) { font-size: 0.86em; }
