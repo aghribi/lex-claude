@@ -12,7 +12,7 @@
 - Python follows PEP 8: 79 columns, 72 for comments and docstrings, docstrings on public names; ruff plus pycodestyle; each exception has a noqa with its reason.
 - Integration tests > unit tests. CLI debugging > prints. Bounded active polling. Runtime-owned lifecycles for threads/pools/connections.
 - Token or usage limit: pause at a clean checkpoint, resume from it when the limit resets.
-- Writing: short, no history unless asked, no em dashes, no "not X, it's Y", no boosters, no consultant speak. Anti-LLM pass always.
+- Writing: short, no history unless asked, no em dashes, no "not X, it's Y", no boosters, no consultant speak. Anti-LLM pass always. File and folder links in chat: markdown link to the absolute `file://` URL. Documents sent under the user's name: `ag-voice` text, the user's template, rendered and shown to the user before sending.
 - Trackers: title + a few bullets, never in the user's first person. One key end to end (ticket, branch, PR/MR, WP/task, deliverable); reports cite evidence.
 - Research: design and success criteria before results; a spec change after results is a new, documented analysis.
 - Never invent a citation, DOI, number or derivation: verify it or mark `[UNVERIFIED]` with everything known.

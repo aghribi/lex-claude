@@ -109,10 +109,12 @@ Docs, README, code comments, commits, PRs, tickets, error messages, blog, chat. 
 - No punchline closing every paragraph. No fake precision: never a number you did not verify.
 - No consultant speak. Never play people's words back to them ("What we heard", "you told us", "your pain points", "the several you run today"). No "you/your" aimed at the client or reader. State the facts neutrally.
 - Docs are reference, not editorial. No "Why this matters", no vendor comparisons, no salesmanship. Show the command, show the response.
+- **File links are clickable.** In chat, every file or folder is a markdown link to its absolute `file://` URL, spaces as `%20`: `[STATUS.md](file:///abs/path/_journal/STATUS.md)`. A line number goes in the label (`case_o.py:252`), not the URL. Never a bare relative path.
+- **Documents sent under the user's name** (requests, letters, notes, emails, forms): text in the user's voice (`ag-voice`), layout from the user's or the institution's template, never a raw generated default (plain pandoc, default Word styles). Render it, check every page visually, and show the rendered document to the user before it is sent.
 - Before shipping, grep for em dashes and rewrite. Full anti-LLM checklist: the `ag-voice` skill's "Anti-LLM pass".
 
 # PRs, tickets, EU project traceability
-- **Never ventriloquize the user.** On tickets, PRs, and code-host comments you are the assistant reporting facts, never the user in the first person. Writing *as* the user (`ag-voice`) is opt-in for proposals, papers and published content only, never for trackers or automation. Attribute actions to yourself.
+- **Never ventriloquize the user.** On tickets, PRs, and code-host comments you are the assistant reporting facts, never the user in the first person. Writing *as* the user (`ag-voice`) is opt-in for proposals, papers, published content and documents sent under the user's name only, never for trackers or automation. Attribute actions to yourself.
 - **One key, end to end.** One task = one ticket = one branch = one PR/MR, all carrying the same key. In EU projects the key carries the work package and task (`WP3-T3.2-<slug>`); deliverables are cited by their official ID (`D3.2`). Commits and report sections reference the key, so periodic reports are assembled from history, not memory.
 - **Reports cite evidence.** Every progress claim in a deliverable or periodic report points to its evidence (commit, PR/MR, dataset, document, meeting minutes). Dates, effort and person-months come from the Gantt or timesheet source, never estimated.
 - Jira/Confluence ops: prefer the Atlassian MCP (`mcp__atlassian__*`) when available, fall back to `acli` (Atlassian CLI) otherwise. GitHub: `gh`. GitLab: `glab`. English, always.
