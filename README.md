@@ -90,6 +90,8 @@ ag codex [--lite|--full] [prompt]                  # launch Codex with lex-claud
 ag codex --print [--lite|--full] [prompt]          # inspect the generated Codex prompt without launching
 ag rag <command> [args]                            # ag-rag indexer: search, stats, update, index, embed, init
 ag sessions [terms...] [-n N]                      # find sessions across all projects by their prompts: date, folder, resume command
+ag lineage [--all]                                 # succession lines touching this folder as trees; resume command of each tip
+ag lineage link --parent ID [--child ID]           # attach a hand-started session (default: current) as the next generation
 ag task add "<text> [#tag] [@project]" [--due D]  # task note in the vault (05_tasks/), project from the folder, session id recorded
 ag task list [-p P|--here] [-t T] [-s S]           # open tasks (open + waiting by default); done|status|show <ref>
 ag usage                                           # report which commands + skills get used; never-used = debloat candidates
@@ -250,6 +252,8 @@ Identity and rules loading is verified live by a judge. Work near the context li
 `etat.sh` at `SessionStart` injects the active identity and the live git line. That is the état the opener reports and the master verifies against.
 
 The flow lives at the harness level, so every identity gets it. Codex has no hooks, so no succession there.
+
+- **Lineage** (`ag lineage`). Each successor's record under `state/lineage/<id>` holds its generation and its predecessor. A session started by hand that continues earlier work is attached with `ag lineage link --parent <id>`; its record is marked `link`, since no master verified it. `ag lineage` draws the lines touching the current folder as trees, so a fork (two children of one session) shows as a branch. Compaction keeps the session id and is not a generation.
 
 Kill switch: `LEX_CLAUDE_HANDOFF_DISABLE=1` disables the trigger, the watch and the succession. `git revert` + `ag update` removes the wiring.
 

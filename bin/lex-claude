@@ -99,6 +99,8 @@ Usage:
   lex-claude init claude                             Print the context the SessionStart hook loads into Claude Code.
   lex-claude rag <command> [args...]                 Run the ag-rag indexer (search, stats, update, index, embed, init). See 'ag rag --help'.
   lex-claude sessions [terms...] [-n N]              Find sessions across all projects by their prompts; prints date, folder and resume command.
+  lex-claude lineage [--all] [--folder DIR]          Succession lines touching the folder (default: here), as trees: generation, kind, last activity, last prompt, resume command of each tip.
+  lex-claude lineage link --parent ID [--child ID]   Attach a hand-started session (default: the current one) to a line as the next generation.
   lex-claude task add|list|set|done|status|show|sync [args]   Tasks as notes in the Obsidian vault (05_tasks/), with project, tags and the session that set them, synced with mail tagged todo and the Reminders list "ag tasks". See 'ag task --help'.
   lex-claude usage                                   Report which commands/skills get used (and which never do). Debloat aid.
   lex-claude journal init|show|check|all|root        Per-project journal in <project>/_journal/ (STATUS, RESULTS, session notes). Injected at SessionStart only inside that project.
@@ -1205,6 +1207,7 @@ _ag() {
     'init:shell completion + context dump'
     'rag:ag-rag indexer (search, stats, update)'
     'sessions:find sessions across all projects'
+    'lineage:succession lines as trees (link: attach a session)'
     'task:tasks in the vault (add, list, set, done, status, show, sync)'
     'journal:per-project journal (init, show, check, all, root)'
     'usage:report used / never-used commands + skills'
@@ -1254,7 +1257,7 @@ _ag() {
   local cur prev cmds
   cur="${COMP_WORDS[COMP_CWORD]}"
   prev="${COMP_WORDS[COMP_CWORD-1]}"
-  cmds="install update identity rules model lang skip brand github-login awake codex claude init rag sessions task journal usage doctor version"
+  cmds="install update identity rules model lang skip brand github-login awake codex claude init rag sessions lineage task journal usage doctor version"
   case "$prev" in
     ag|lex-claude) COMPREPLY=( $(compgen -W "$cmds" -- "$cur") ) ;;
     install)       COMPREPLY=( $(compgen -W "--yes --pkg-only" -- "$cur") ) ;;
@@ -1310,6 +1313,7 @@ Available subcommands (run with `ag <cmd>`):
 - `rag stats`                                 index counts and freshness
 - `rag update|index|embed [--scope S] [--prune] [--minutes M]`  refresh the index (one run at a time)
 - `sessions [terms...] [-n N]`                find sessions across all projects by their prompts: date, folder, resume command
+- `lineage [--all]`, `lineage link --parent ID`  succession lines touching this folder as trees; link attaches a hand-started session
 - `task add "<text> [#tag] [@project]" [--due D]`  add a task note in the vault (05_tasks/); project from the folder, session id recorded
 - `task list [-p P|--here] [-t T] [-s S]`     open tasks (open + waiting by default)
 - `task done|show <ref>`, `task status <ref> open|waiting|done`  ref = part of the task file name
@@ -1482,6 +1486,14 @@ cmd_sessions() {
   local script="$SELF_DIR/tools/ag-sessions/ag_sessions.py"
   [ -f "$script" ] || script="$INSTALL_DIR/tools/ag-sessions/ag_sessions.py"
   [ -f "$script" ] || die "ag_sessions.py not found (run 'ag update')"
+  command -v uv >/dev/null 2>&1 || die "uv not found"
+  exec uv run -q --no-project "$script" "$@"
+}
+
+cmd_lineage() {
+  local script="$SELF_DIR/tools/ag-sessions/ag_lineage.py"
+  [ -f "$script" ] || script="$INSTALL_DIR/tools/ag-sessions/ag_lineage.py"
+  [ -f "$script" ] || die "ag_lineage.py not found (run 'ag update')"
   command -v uv >/dev/null 2>&1 || die "uv not found"
   exec uv run -q --no-project "$script" "$@"
 }
@@ -1704,7 +1716,7 @@ if [ "$(basename "$0")" = "$BRAND_CMD" ]; then
 fi
 
 case "${1:-}" in
-  install|update|__deploy|identity|rules|model|lang|skip|brand|version|github-login|awake|codex|claude|init|rag|sessions|task|doctor|usage|-v|--version|-h|-help|--help|help|"") ;;
+  install|update|__deploy|identity|rules|model|lang|skip|brand|version|github-login|awake|codex|claude|init|rag|sessions|lineage|task|doctor|usage|-v|--version|-h|-help|--help|help|"") ;;
   *) auto_update "$@" ;;
 esac
 
@@ -1740,6 +1752,7 @@ case "${1:-}" in
   doctor)       shift; cmd_doctor "$@" ;;
   rag)          shift; cmd_rag "$@" ;;
   sessions)     shift; cmd_sessions "$@" ;;
+  lineage)      shift; cmd_lineage "$@" ;;
   task)         shift; cmd_task "$@" ;;
   usage)        shift; cmd_usage "$@" ;;
   journal)      shift; bash "$INSTALL_DIR/journal.sh" "$@" ;;

@@ -55,7 +55,7 @@ MASTER="$SELF_DIR/master.sh"
 STATE_ROOT="$HOME/.claude/lex-claude/state"
 LATCH_DIR="$STATE_ROOT/.succession"
 WATCH_DIR="$LATCH_DIR/watch"
-LINEAGE_DIR="$STATE_ROOT/lineage"   # <session-id> = "gen<TAB>predecessor-id"; read by the statusline
+LINEAGE_DIR="$STATE_ROOT/lineage"   # <session-id> = "gen<TAB>predecessor-id[<TAB>link]"; read by the statusline and ag lineage
 
 # Context size = last assistant turn's live footprint (input + both cache reads).
 context_tokens() {
@@ -158,7 +158,7 @@ open_successor() {
       # The agent renames the workspace once claude starts; the description stays
       # and marks it as a successor in the sidebar (same lineage as the statusline).
       local gen="" parent="" desc="successor"
-      [ -f "$LINEAGE_DIR/$id" ] && IFS=$'\t' read -r gen parent < "$LINEAGE_DIR/$id"
+      [ -f "$LINEAGE_DIR/$id" ] && IFS=$'\t' read -r gen parent _ < "$LINEAGE_DIR/$id"
       [ -n "$gen" ] && [ -n "$parent" ] && desc="successor gen$gen ←$(printf '%s' "${parent:0:8}" | tr 'A-Z' 'a-z')"
       err=$(CMUX_QUIET=1 cmux workspace create --name "successor ${id%%-*}" --description "$desc" \
         --cwd "$dir" --command "$launcher" --focus true 2>&1) && err="" ;;

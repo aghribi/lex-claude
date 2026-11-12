@@ -67,12 +67,13 @@ if [ -n "$ctx_tokens" ]; then
     fi
 fi
 
-# Succession lineage, written by succeed.sh on handover: "gen<TAB>predecessor-id".
+# Succession lineage, written by succeed.sh on handover and by `ag lineage link`:
+# "gen<TAB>predecessor-id[<TAB>link]".
 lineage_info=""
 session_id=$(j '.session_id // empty')
 LEX_LINEAGE_FILE="$HOME/.claude/lex-claude/state/lineage/${session_id//[^A-Za-z0-9-]/}"
 if [ -n "$session_id" ] && [ -f "$LEX_LINEAGE_FILE" ]; then
-    IFS=$'\t' read -r gen parent < "$LEX_LINEAGE_FILE"
+    IFS=$'\t' read -r gen parent _ < "$LEX_LINEAGE_FILE"
     [ -n "${gen:-}" ] && [ -n "${parent:-}" ] && lineage_info=$(printf " \033[2;36mgen%s ←%s\033[0m" "$gen" "$(printf '%s' "${parent:0:8}" | tr 'A-Z' 'a-z')")
 fi
 
