@@ -18,11 +18,12 @@ swaps the picture and a caption replaces the previous one. Elements:
   icon: name           box: [x, y, w, h], color:; lucide icon
   dot: [x, y]          r:, color:, diamond: true
   clear: [x, y, w, h]  paints the slide background
+  veil: [x, y, w, h]   white at 50 % over what is drawn (alpha:, radius:): dims a card
 
-Writes `_diagrams/<name>.svg` (revealjs, inline, steps as fragments), `_diagrams/<name>-<n>.pdf` (beamer, one per
+Lists the `.sync` figures that need a frame in `_diagrams/frames.json`. Writes `_diagrams/<name>.svg` (revealjs, inline, steps as fragments), `_diagrams/<name>-<n>.pdf` (beamer, one per
 step). pptx_components.py draws the same primitives as PowerPoint shapes. `prims()` is the one layout.
 """
-import base64, io, math, pathlib, re, subprocess, sys, urllib.request
+import base64, json, math, pathlib, re, subprocess, sys, urllib.request
 from html import escape
 import yaml
 from PIL import Image
@@ -134,10 +135,21 @@ def prims(el, spec_size, col, ddir):
         if el.get("diamond"):
             return [{"p": "shape", "points": [(x, y - r), (x + r, y), (x, y + r), (x - r, y)], "fill": c}]
         return [{"p": "oval", "x": x - r, "y": y - r, "w": 2 * r, "h": 2 * r, "fill": c}]
+    if "veil" in el:
+        x, y, w, h = el["veil"]
+        return [{"p": "rect", "x": x, "y": y, "w": w, "h": h, "fill": "FFFFFF", "line": None, "radius": el.get("radius", 3), "alpha": el.get("alpha", 0.5)}]
     if "clear" in el:
         x, y, w, h = el["clear"]
         return [{"p": "rect", "x": x, "y": y, "w": w, "h": h, "fill": col["paper"], "line": None, "radius": 0}]
     sys.exit(f"diagram: unknown element {el}")
+
+
+def caption(s, y, w, h, col):
+    """A step's message: a tinted band with an accent bar, as a `.takeaway`."""
+    return [{"p": "rect", "x": 0, "y": y, "w": w, "h": h, "fill": col["tint"], "line": None, "radius": 0},
+            {"p": "rect", "x": 0, "y": y, "w": 4, "h": h, "fill": col["secondary"], "line": None, "radius": 0},
+            {"p": "para", "x": 14, "y": y, "w": w - 20, "h": h, "align": "l", "anchor": "m",
+             "paras": [{"s": s, "size": 14, "bold": True, "head": False, "color": col["primary"]}]}]
 
 
 def layers(spec, col, ddir):
@@ -148,7 +160,7 @@ def layers(spec, col, ddir):
         ps = [p for el in step.get("draw", []) for p in prims(el, spec["size"], col, ddir)]
         if step.get("caption"):
             ps += prims({"clear": [0, H - CAPTION_H, W, CAPTION_H]}, spec["size"], col, ddir)
-            ps += prims({"text": step["caption"], "at": [0, H - CAPTION_H], "w": W, "h": CAPTION_H, "size": 15, "anchor": "m"}, spec["size"], col, ddir)
+            ps += caption(step["caption"], H - CAPTION_H + 4, W, CAPTION_H - 4, col)
         out.append(ps)
     return out
 
@@ -157,7 +169,8 @@ def svg_prim(p, faces, live):
     if p["p"] == "rect":
         fill = f'#{p["fill"]}' if p["fill"] else "none"
         stroke = f' stroke="#{p["line"]}" stroke-width="1"' if p["line"] else ""
-        return f'<rect x="{p["x"]}" y="{p["y"]}" width="{p["w"]}" height="{p["h"]}" rx="{p["radius"]}" fill="{fill}"{stroke}/>'
+        alpha = f' fill-opacity="{p["alpha"]}"' if p.get("alpha") is not None else ""
+        return f'<rect x="{p["x"]}" y="{p["y"]}" width="{p["w"]}" height="{p["h"]}" rx="{p["radius"]}" fill="{fill}"{alpha}{stroke}/>'
     if p["p"] == "oval":
         return f'<circle cx="{p["x"] + p["w"] / 2}" cy="{p["y"] + p["h"] / 2}" r="{p["w"] / 2}" fill="#{p["fill"]}"/>'
     if p["p"] == "shape":
@@ -215,14 +228,29 @@ def fetch_icon(ddir, name):
         dst.write_bytes(r.read())
 
 
+def needs_frame(path, bg):
+    """A figure gets a frame when its border is opaque and differs from the slide background `bg` (hex)."""
+    im = Image.open(path).convert("RGBA")
+    w, h = im.size
+    edge = ([im.getpixel((x, y)) for x in range(0, w, max(1, w // 60)) for y in (0, h - 1)]
+            + [im.getpixel((x, y)) for y in range(0, h, max(1, h // 60)) for x in (0, w - 1)])
+    opaque = [px for px in edge if px[3] > 200]
+    if len(opaque) < len(edge) / 2:
+        return False
+    ref = [int(bg[i:i + 2], 16) for i in (0, 2, 4)]
+    same = sum(1 for px in opaque if max(abs(px[k] - ref[k]) for k in range(3)) <= 4)
+    return same < 0.9 * len(opaque)
+
+
 def deck_specs(ddir):
     text = "\n".join(q.read_text() for q in ddir.glob("*.qmd"))
-    return re.findall(r'\.diagram[^}]*\bsrc="([^"]+)"', text), set(re.findall(r'\bicon="([a-z0-9-]+)"', text))
+    return (re.findall(r'\.diagram[^}]*\bsrc="([^"]+)"', text), set(re.findall(r'\bicon="([a-z0-9-]+)"', text)),
+            sorted(set(re.findall(r'\b(?:fig|legend)="([^"]+)"', text))))
 
 
 def main(ddir):
-    srcs, icons = deck_specs(ddir)
-    if not srcs and not icons:
+    srcs, icons, figs = deck_specs(ddir)
+    if not srcs and not icons and not figs:
         return
     proj = yaml.safe_load((ddir / "_quarto.yml").read_text()) or {}
     cfg, brand = load(pathlib.Path(proj["charter"]))
@@ -239,6 +267,8 @@ def main(ddir):
         fetch_icon(ddir, name)
         rasterise(ddir, f"{ICONS}/{name}.svg", color=col["primary"], px=192)
     (ddir / OUT).mkdir(exist_ok=True)
+    # `.sync` figures to frame, read by charter.lua (pptx_components.py asks needs_frame itself)
+    (ddir / OUT / "frames.json").write_text(json.dumps([f for f in figs if needs_frame(ddir / f, col["paper"])]))
     for src, spec in specs.items():
         stem = pathlib.Path(src).stem
         lay = layers(spec, col, ddir)

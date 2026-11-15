@@ -9,9 +9,9 @@
 pandoc cannot draw them, so charter.lua writes their content to `_components.json` and leaves a bullet list on
 the slide. This step removes that list and draws the component in the template body box, in the charter colours
 and the template fonts. It also adds the `eyebrow:` label, smaller author lines and the institute on the title
-slide. `.diagram` steps and `.build` items become groups that appear on click. Slides already drawn (shapes named `agc:`) are left alone, so a rerun changes nothing.
+slide. `.diagram` steps and `.build` items become groups that appear on click; `.sync` points and figures and a `.takeaway` follow their clicks. Slides already drawn (shapes named `agc:`) are left alone, so a rerun changes nothing.
 """
-import json, math, os, pathlib, sys
+import functools, json, math, os, pathlib, sys
 import yaml
 from pptx import Presentation
 from pptx.dml.color import RGBColor
@@ -22,8 +22,8 @@ from pptx.oxml import parse_xml
 from pptx.util import Pt
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from charter import NS, load, logo_box, mark_under, moved_mark  # noqa: E402
-from diagram import ICONS, layers, palette, rasterise  # noqa: E402
+from charter import NS, load, logo_box, logo_shift  # noqa: E402
+from diagram import ICONS, layers, needs_frame, palette, rasterise  # noqa: E402
 
 TAG = "agc:"
 
@@ -112,22 +112,39 @@ def group(slide):
     return g
 
 
-def animate(slide, groups):
-    """Each group fades in on its own click."""
+def effect(kind, spid, ids, node):
+    """One effect on one shape: "in" fades it in, "out" fades it out, "dim" takes it to 40 % opacity."""
+    t = f'<p:tgtEl><p:spTgt spid="{spid}"/></p:tgtEl>'
+    c, d, e = (next(ids) for _ in range(3))
+    vis = ('<p:set><p:cBhvr><p:cTn id="{}" dur="1" fill="hold"><p:stCondLst><p:cond delay="{}"/></p:stCondLst></p:cTn>' + t +
+           '<p:attrNameLst><p:attrName>style.visibility</p:attrName></p:attrNameLst></p:cBhvr><p:to><p:strVal val="{}"/></p:to></p:set>')
+    if kind == "in":
+        preset, body = ("10", "entr"), (vis.format(d, 0, "visible") +
+                                         f'<p:animEffect transition="in" filter="fade"><p:cBhvr><p:cTn id="{e}" dur="400"/>{t}</p:cBhvr></p:animEffect>')
+    elif kind == "out":
+        preset, body = ("10", "exit"), (f'<p:animEffect transition="out" filter="fade"><p:cBhvr><p:cTn id="{e}" dur="400"/>{t}</p:cBhvr></p:animEffect>' +
+                                         vis.format(d, 399, "hidden"))
+    else:
+        preset, body = ("9", "emph"), (
+            f'<p:set><p:cBhvr><p:cTn id="{d}" dur="400" fill="hold"/>{t}<p:attrNameLst><p:attrName>style.opacity</p:attrName></p:attrNameLst></p:cBhvr>'
+            '<p:to><p:strVal val="0.4"/></p:to></p:set>'
+            f'<p:animEffect transition="out" filter="image" prLst="opacity: 0.4"><p:cBhvr rctx="IE"><p:cTn id="{e}" dur="400" fill="hold"/>{t}</p:cBhvr></p:animEffect>')
+    return (f'<p:par><p:cTn id="{c}" presetID="{preset[0]}" presetClass="{preset[1]}" presetSubtype="0" fill="hold" nodeType="{node}">'
+            f'<p:stCondLst><p:cond delay="0"/></p:stCondLst><p:childTnLst>{body}</p:childTnLst></p:cTn></p:par>')
+
+
+def timeline(slide, clicks):
+    """Each click runs its list of (kind, shape) effects together; see `effect`."""
     ids = iter(range(3, 10 ** 6))
-    clicks = []
-    for g in groups:
-        target = f'<p:tgtEl><p:spTgt spid="{g.shape_id}"/></p:tgtEl>'
-        a, b, c, d, e = (next(ids) for _ in range(5))
-        clicks.append(
-            f'<p:par><p:cTn id="{a}" fill="hold"><p:stCondLst><p:cond delay="indefinite"/></p:stCondLst><p:childTnLst>'
-            f'<p:par><p:cTn id="{b}" fill="hold"><p:stCondLst><p:cond delay="0"/></p:stCondLst><p:childTnLst>'
-            f'<p:par><p:cTn id="{c}" presetID="10" presetClass="entr" presetSubtype="0" fill="hold" nodeType="clickEffect"><p:stCondLst><p:cond delay="0"/></p:stCondLst><p:childTnLst>'
-            f'<p:set><p:cBhvr><p:cTn id="{d}" dur="1" fill="hold"><p:stCondLst><p:cond delay="0"/></p:stCondLst></p:cTn>{target}<p:attrNameLst><p:attrName>style.visibility</p:attrName></p:attrNameLst></p:cBhvr><p:to><p:strVal val="visible"/></p:to></p:set>'
-            f'<p:animEffect transition="in" filter="fade"><p:cBhvr><p:cTn id="{e}" dur="400"/>{target}</p:cBhvr></p:animEffect>'
-            "</p:childTnLst></p:cTn></p:par></p:childTnLst></p:cTn></p:par></p:childTnLst></p:cTn></p:par>")
+    out = []
+    for effects in clicks:
+        a, b = next(ids), next(ids)
+        inner = "".join(effect(kind, sh.shape_id, ids, "clickEffect" if j == 0 else "withEffect") for j, (kind, sh) in enumerate(effects))
+        out.append(f'<p:par><p:cTn id="{a}" fill="hold"><p:stCondLst><p:cond delay="indefinite"/></p:stCondLst><p:childTnLst>'
+                   f'<p:par><p:cTn id="{b}" fill="hold"><p:stCondLst><p:cond delay="0"/></p:stCondLst><p:childTnLst>{inner}'
+                   "</p:childTnLst></p:cTn></p:par></p:childTnLst></p:cTn></p:par>")
     xml = ('<p:timing xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:tnLst><p:par><p:cTn id="1" dur="indefinite" restart="never" nodeType="tmRoot"><p:childTnLst>'
-           '<p:seq concurrent="1" nextAc="seek"><p:cTn id="2" dur="indefinite" nodeType="mainSeq"><p:childTnLst>' + "".join(clicks) +
+           '<p:seq concurrent="1" nextAc="seek"><p:cTn id="2" dur="indefinite" nodeType="mainSeq"><p:childTnLst>' + "".join(out) +
            '</p:childTnLst></p:cTn><p:prevCondLst><p:cond evt="onPrev" delay="0"><p:tgtEl><p:sldTgt/></p:tgtEl></p:cond></p:prevCondLst>'
            '<p:nextCondLst><p:cond evt="onNext" delay="0"><p:tgtEl><p:sldTgt/></p:tgtEl></p:cond></p:nextCondLst></p:seq>'
            "</p:childTnLst></p:cTn></p:par></p:tnLst></p:timing>")
@@ -137,6 +154,11 @@ def animate(slide, groups):
     ext = sld.find("p:extLst", NS)
     el = parse_xml(xml)
     ext.addprevious(el) if ext is not None else sld.append(el)
+
+
+def animate(slide, groups):
+    """Each group fades in on its own click."""
+    timeline(slide, [[("in", g)] for g in groups])
 
 
 def draw_prim(g, p, ox, oy, fonts):
@@ -149,6 +171,9 @@ def draw_prim(g, p, ox, oy, fonts):
         if p.get("fill"):
             r.fill.solid()
             r.fill.fore_color.rgb = RGBColor.from_string(p["fill"])
+            if p.get("alpha") is not None:
+                clr = r.fill._xPr.find(f"{{{NS['a']}}}solidFill")[0]
+                clr.append(parse_xml(f'<a:alpha xmlns:a="{NS["a"]}" val="{round(p["alpha"] * 100000)}"/>'))
         else:
             r.fill.background()
         if p.get("line"):
@@ -279,6 +304,147 @@ def draw(slide, comp, body, col, fonts, ddir):
         animate(slide, groups)
 
 
+def rich(pa, x, y, w, h, parts, size, color, bold_color):
+    """Text box from runs ({t, b}): bold runs in `bold_color`."""
+    tb = pa.text(x, y, w, h, "", size, color)
+    p = tb.text_frame.paragraphs[0]
+    p._p.remove(p.runs[0]._r)
+    for part in parts:
+        r = p.add_run()
+        r.text, r.font.size, r.font.name = part["t"], Pt(size), pa.fonts["base"]
+        r.font.bold = bool(part.get("b"))
+        r.font.color.rgb = RGBColor.from_string(bold_color if part.get("b") else color)
+    return tb
+
+
+def lines(parts, size, w):
+    return max(1, math.ceil(sum(len(p["t"]) for p in parts) * 0.5 * size / w))
+
+
+def draw_takeaway(slide, comp, body, col, fonts):
+    """The message box at the bottom of the body; returns it as a group, to animate."""
+    g = group(slide)
+    pa = Painter(g, col, fonts)
+    h = lines(comp["runs"], 16, body["w"] - 30) * 16 * 1.25 + 14
+    y = body["y"] + body["h"] - h
+    pa.rect(body["x"], y, body["w"], h, mix(col["secondary"], "FFFFFF", 0.14))
+    pa.rect(body["x"], y, 5, h, col["secondary"])
+    t = rich(pa, body["x"] + 18, y, body["w"] - 30, h, comp["runs"], 16, col["primary"], col["primary"])
+    t.text_frame.vertical_anchor = MSO_ANCHOR.MIDDLE
+    for r in t.text_frame.paragraphs[0].runs:
+        r.font.bold = True
+    return g, h
+
+
+def draw_spotlight(slide, comp, size, col, fonts):
+    """The `.spotlight` card over a white veil, as one group: label strip, then one paragraph per block."""
+    g = group(slide)
+    g.name = TAG + "spotlight"
+    pa = Painter(g, col, fonts)
+    sw, sh = size
+    veil = pa.rect(0, 0, sw, sh, "FFFFFF")
+    clr = veil.fill._xPr.find(f"{{{NS['a']}}}solidFill")[0]
+    clr.append(parse_xml(f'<a:alpha xmlns:a="{NS["a"]}" val="86000"/>'))
+    w = sw * 0.6
+    body = [lines(par, 18, w - 40) * 18 * 1.3 + 8 for par in comp["paras"]]
+    h = 34 + sum(body) + 24
+    x, y = (sw - w) / 2, (sh - h) / 2
+    pa.rect(x, y, w, h, "FFFFFF", line=col["primary"], kind=MSO_SHAPE.ROUNDED_RECTANGLE, radius=0.05)
+    pa.rect(x + 2, y + 2, w - 4, 30, col["primary"])
+    pa.text(x + 20, y + 2, w - 40, 30, comp["label"], 11, "FFFFFF", bold=True, upper=True, anchor=MSO_ANCHOR.MIDDLE, spacing=80)
+    ty = y + 46
+    for par, bh in zip(comp["paras"], body):
+        rich(pa, x + 20, ty, w - 40, bh, par, 18, col["ink"], col["primary"])
+        ty += bh
+    return g
+
+
+def append_click(slide, g):
+    """`g` fades in on one more click, after the slide's existing ones."""
+    seq = slide._element.find(".//p:seq/p:cTn/p:childTnLst", NS)
+    if seq is None:
+        animate(slide, [g])
+        return
+    ids = iter(range(max(int(c.get("id")) for c in slide._element.iter(f"{{{NS['p']}}}cTn")) + 1, 10 ** 6))
+    a, b = next(ids), next(ids)
+    seq.append(parse_xml(f'<p:par xmlns:p="{NS["p"]}"><p:cTn id="{a}" fill="hold"><p:stCondLst><p:cond delay="indefinite"/></p:stCondLst>'
+                         f'<p:childTnLst><p:par><p:cTn id="{b}" fill="hold"><p:stCondLst><p:cond delay="0"/></p:stCondLst><p:childTnLst>'
+                         + effect("in", g.shape_id, ids, "clickEffect") + "</p:childTnLst></p:cTn></p:par></p:childTnLst></p:cTn></p:par>"))
+
+
+def draw_sync(slide, comp, body, col, fonts, ddir, take=None, spot=None):
+    """Points left, figures right; each click shows a point and its figure, the previous point dims.
+
+    `spot`: a function drawing the `.spotlight` that follows point
+    comp["spot"]; it takes the click before the next point.
+    """
+    from PIL import Image
+    split_body(slide, body)
+    clicks, bottom = [], body["y"] + body["h"]
+    if take:
+        tg, th = draw_takeaway(slide, take, body, col, fonts)
+        bottom -= th + 10
+    lw = body["w"] * 0.42
+    rx, rw = body["x"] + lw + 20, body["w"] - lw - 20
+    size, items = 16, comp["items"]
+    hs = [lines(it["runs"], size, lw - 16) * size * 1.25 for it in items]
+    gap = 14
+    leg_h = 110  # a legend sits under its point, over the room of the points still to come
+    y = body["y"] + max(0, (bottom - body["y"] - sum(hs) - gap * (len(hs) - 1)) / 2)
+    points, figs = [], []  # figs[k]: the figure group shown with point k (a point without fig keeps the last one)
+    for it, h in zip(items, hs):
+        g = group(slide)
+        pa = Painter(g, col, fonts)
+        if it.get("icon"):
+            png = rasterise(ddir, f"{ICONS}/{it['icon']}.svg", color=col["secondary"], px=192)
+            pa.s.shapes.add_picture(str(png), Pt(body["x"]), Pt(y + 1), Pt(size), Pt(size)).name = TAG + "icon"
+        else:
+            pa.rect(body["x"], y + size * 0.45, 6, 6, col["secondary"], kind=MSO_SHAPE.OVAL)
+        indent = size + 8 if it.get("icon") else 16
+        rich(pa, body["x"] + indent, y, lw - indent, h, it["runs"], size, col["foreground"], col["primary"])
+        points.append(g)
+        it["bottom"] = y + h
+        y += h + gap
+        if not it.get("fig"):
+            figs.append(figs[-1])
+            continue
+        g = group(slide)
+        credit_h = 14 if it.get("credit") else 0
+        with Image.open(ddir / it["fig"]) as im:
+            iw, ih = im.size
+        avail = bottom - body["y"] - credit_h
+        scale = min(rw / iw, avail / ih)
+        w, h_img = iw * scale, ih * scale
+        fy = body["y"] + (avail - h_img) / 2
+        pic = g.shapes.add_picture(str(ddir / it["fig"]), Pt(rx + (rw - w) / 2), Pt(fy), Pt(w), Pt(h_img))
+        pic.name = TAG + "fig"
+        if needs_frame(ddir / it["fig"], col["paper"]):
+            pic.line.color.rgb = RGBColor.from_string(mix(col["foreground"], "FFFFFF", 0.25))
+            pic.line.width = Pt(0.75)
+        if credit_h:
+            Painter(g, col, fonts).text(rx, fy + h_img + 2, rw, 12, it["credit"], 9, mix(col["foreground"], "FFFFFF", 0.6), align=PP_ALIGN.CENTER)
+        figs.append(g)
+    for it, g in zip(items, figs):
+        if it.get("fig") and it.get("legend"):
+            with Image.open(ddir / it["legend"]) as im:
+                iw, ih = im.size
+            scale = min(lw * 0.85 / iw, leg_h / ih)  # centred under its own point
+            lx = body["x"] + (lw - iw * scale) / 2
+            pic = g.shapes.add_picture(str(ddir / it["legend"]), Pt(lx), Pt(it["bottom"] + 8), Pt(iw * scale), Pt(ih * scale))
+            pic.name = TAG + "legend"
+    sg = spot() if spot else None
+    for k in range(1, len(items)):
+        swap = [("out", figs[k - 1]), ("in", figs[k])] if figs[k] is not figs[k - 1] else []
+        leave = []
+        if sg is not None and k == comp["spot"]:
+            clicks.append([("in", sg)])
+            leave = [("out", sg)]
+        clicks.append([("in", points[k]), ("dim", points[k - 1])] + swap + leave)
+    if take:
+        clicks.append([("in", tg), ("dim", points[-1])])
+    timeline(slide, clicks)
+
+
 def title_slide(slide, data, geo, col, fonts):
     ph = next((p for p in slide.placeholders if p.placeholder_format.idx == 1), None)
     if ph is not None:
@@ -297,32 +463,24 @@ def title_slide(slide, data, geo, col, fonts):
         Painter(slide, col, fonts).text(t["x"] + 7.2, y, t["w"], 18, data["eyebrow"], 12, mix(col["secondary"], "FFFFFF", 0.75), bold=True, upper=True, spacing=200)
 
 
-def swap_mark(slide, geo, under, ext):
-    """Cover the layout's mark and draw it again below the project logo (`moved_mark`)."""
-    m, mm = geo["content"]["mark"], moved_mark(geo)
-    r = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, Pt(m["x"] - 1), Pt(m["y"] - 1), Pt(m["w"] + 2), Pt(m["h"] + 2))
-    r.fill.solid()
-    r.fill.fore_color.rgb = RGBColor.from_string(under)
-    r.line.fill.background()
-    r.name = TAG + "cover"
-    pic = slide.shapes.add_picture(str(ext / "backgrounds" / m["file"]), Pt(mm["x"]), Pt(mm["y"]), Pt(mm["w"]), Pt(mm["h"]))
-    pic.name = TAG + "mark"
-
-
-def place_logo(slide, src, box):
-    """Logo right-aligned and centred in `box`, aspect kept."""
+def place_logo(slide, src, box, shift):
+    """Logo left-aligned and centred in `box`, aspect kept; the title moves right by `shift`."""
     pic = slide.shapes.add_picture(str(src), 0, 0, height=Pt(box["h"]))
     if pic.width > Pt(box["w"]):
         pic.height = int(pic.height * Pt(box["w"]) / pic.width)
         pic.width = Pt(box["w"])
-    pic.left = Pt(box["x"] + box["w"]) - pic.width
+    pic.left = Pt(box["x"])
+    if slide.shapes.title is not None:
+        slide.shapes.title.left += Pt(shift)
+        slide.shapes.title.width -= Pt(shift)
     pic.top = Pt(box["y"] + box["h"] / 2) - pic.height // 2
     pic.name = TAG + "logo"
 
 
 def template_fonts(prs):
     m = prs.slide_masters[0]._element
-    face = lambda style: (m.find(f".//p:txStyles/p:{style}//a:latin", NS).get("typeface"))
+    def face(style):
+        return (m.find(f".//p:txStyles/p:{style}//a:latin", NS).get("typeface"))
     return {"head": face("titleStyle"), "base": face("bodyStyle")}
 
 
@@ -348,16 +506,38 @@ def main(ddir):
             title_slide(slide, data, geo, col, fonts)
             continue
         title = slide.shapes.title.text_frame.text.strip() if slide.shapes.title is not None else ""
-        for comp in (c for c in data["slides"] if c["title"] == title):
+        comps = [c for c in data["slides"] if c["title"] == title]
+        sync = next((c for c in comps if c["kind"] == "sync"), None)
+        take = next((c for c in comps if c["kind"] == "takeaway"), None)
+        size = (prs.slide_width / 12700, prs.slide_height / 12700)
+        inner = next((c for c in comps if c["kind"] == "spotlight" and c.get("after") is not None), None)
+        for comp in comps:
             if comp["kind"] == "logo":
-                if "mark" in geo["content"]:
-                    swap_mark(slide, geo, mark_under(cfg, brand), cdir / "build" / "_extensions" / cfg["name"])
-                place_logo(slide, ddir / comp["src"], logo_box(geo))
+                place_logo(slide, ddir / comp["src"], logo_box(geo), logo_shift(geo))
                 continue
-            if comp["kind"] == "diagram":
+            if comp["kind"] == "sync":
+                spot = inner and functools.partial(draw_spotlight, slide, inner, size, col, fonts)
+                draw_sync(slide, comp, body, col, fonts, ddir, take, spot)
+            elif comp["kind"] == "takeaway":
+                if sync is None:  # alone it comes on a click; next to a diagram or cards it stays put
+                    split_body(slide, body)
+                    g = draw_takeaway(slide, comp, body, col, fonts)[0]
+                    if all(c["kind"] in ("logo", "takeaway") for c in comps):
+                        animate(slide, [g])
+                continue
+            elif comp["kind"] == "spotlight":
+                continue  # drawn last, over everything else on the slide
+            elif comp["kind"] == "diagram":
                 draw_diagram(slide, comp, body, col, fonts, ddir, prs.slide_width / 12700)
             else:
                 draw(slide, comp, body, col, fonts, ddir)
+            drawn += 1
+        for comp in (c for c in comps if c["kind"] == "spotlight" and c.get("after") is None):
+            for ph in slide.placeholders:  # its fallback line only: the slide's own bullets stay
+                for par in list(ph.text_frame.paragraphs) if ph.has_text_frame else []:
+                    if par.text.strip() == "spotlight":
+                        par._p.getparent().remove(par._p)
+            append_click(slide, draw_spotlight(slide, comp, size, col, fonts))
             drawn += 1
     prs.save(pptx)
     print(f"pptx_components: {drawn} components drawn in {pptx}")

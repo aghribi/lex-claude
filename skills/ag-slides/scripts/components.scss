@@ -66,6 +66,9 @@ $comp-text: mix($body-color, #ffffff, 78%);  // secondary text: tile labels, car
 .reveal .cards:has(> :nth-child(5)) .card:has(.ico) { font-size: 0.68em; }
 .reveal .diagram { margin: 0 -28px; }
 .reveal .diagram svg { display: block; width: 100%; height: auto; overflow: visible; }
+// with a link strip under it, the drawing shrinks to the body box so its caption stays above the strip
+.reveal .slides section.slide:has(> .links) > .diagram { flex: 1 1 auto !important; min-height: 0; margin-bottom: 10px; }
+.reveal .slides section.slide:has(> .links) > .diagram svg { height: 100%; }
 .reveal .diagram svg .fragment { transition: opacity 0.45s ease; }
 
 // steps: numbered cards joined by arrows, left to right
@@ -106,3 +109,60 @@ $comp-text: mix($body-color, #ffffff, 78%);  // secondary text: tile labels, car
 .reveal .links a { display: inline-flex; align-items: center; gap: 7px; color: $brand-secondary; }
 .reveal .links svg { width: 24px; height: 24px; flex: none; }
 .reveal .links a.ref { color: $comp-text; font-style: italic; }
+// a talk at the same event: a pill, so it reads as "go and see", not as a reference
+.reveal .links a.talk { padding: 2px 12px 2px 8px; border: 2px solid $brand-secondary; border-radius: 999px; font-weight: 600; }
+.reveal .links a.talk:hover { background: $brand-secondary; color: #fff; }
+// links tied to a .sync point share one cell and swap with it (links.lua)
+.reveal .links .lk-steps { display: inline-grid; }
+.reveal .links .lk-steps > .lk-step { grid-area: 1 / 1; }
+.reveal .links .lk-step { display: inline-flex; flex-wrap: wrap; gap: 4px 26px; }
+
+// .sync (charter.lua): points left, the figure of the current point right, one grid cell for all figures
+.reveal .sync { display: grid; grid-template-columns: 42% 1fr; gap: 1.2em; align-items: center; flex: 1 1 auto !important; min-height: 0; }
+.reveal .sync-points { font-size: 0.72em; line-height: 1.3; }
+.reveal .sync-point { position: relative; padding-left: 1em; margin: 0.55em 0; }
+.reveal .sync-point::before { content: ""; position: absolute; left: 0; top: 0.5em; width: 0.38em; height: 0.38em; border-radius: 50%; background: $brand-secondary; }
+.reveal .sync-point p { margin: 0; }
+.reveal .sync-point.has-icon { padding-left: 1.5em; }
+.reveal .sync-point.has-icon::before { display: none; }
+.reveal .sync-point .ico { position: absolute; left: 0; top: 0.12em; width: 1.05em; height: 1.05em; color: $brand-secondary; }
+.reveal .sync-point .ico svg { width: 100%; height: 100%; }
+.reveal .sync-figs { display: grid; align-items: center; justify-items: center; height: 100%; min-height: 0; }
+.reveal .sync-cell { grid-area: 1 / 1; width: 100%; text-align: center; }
+// live=: the page itself takes the right half of the slide, top to bottom, drawn at 60 % so a desktop layout fits;
+// it stays clickable and scrolls. Title, mark, links, takeaway and footer move to the left half.
+.reveal .slides section.slide:has(.sync-live) { padding-right: calc(50% + 40px); }
+.reveal .slides section.slide:has(.sync-live) > h2 { width: calc(50% - 80px); font-size: 50px; }
+.reveal .slides section.slide:has(.sync-live) .links { right: calc(50% + 40px); }
+.reveal .slides section.slide:has(.sync-live) .brand-text { width: calc(50% - 200px); font-size: 17px; }
+.reveal .slides section.slide:has(.sync-live) .brand-num { left: auto; right: calc(50% + 40px); width: auto; }
+.reveal:has(section.present .sync-live) .progress { display: none; }
+.reveal .sync:has(.sync-live) { grid-template-columns: 1fr; }
+.reveal .sync-figs:has(.sync-live) { position: absolute; top: 0; right: 0; width: 50%; height: 100%; z-index: 1; }
+.reveal .sync-cell:has(.sync-live), .reveal .sync-cell div:has(> * .sync-live, > .sync-live) { height: 100%; display: flex; flex-direction: column; min-height: 0; }
+.reveal .sync-live { flex: 1 1 auto; width: 100%; min-height: 0; overflow: hidden; border-left: 1px solid $comp-line; }
+.reveal .sync-live iframe { width: 166.67%; height: 166.67%; max-width: none; max-height: none; transform: scale(0.6); transform-origin: 0 0; border: 0; }
+.reveal .sync-live-mark { position: absolute; top: 22px; right: calc(50% + 40px); width: 180px; margin: 0; }
+.reveal .sync-live-mark img { width: 100%; margin: 0; }
+.reveal .sync-fig img { max-height: 430px; max-width: 100%; margin: 0; }
+// a figure whose border is not the slide colour gets a frame (diagram.py decides, charter.lua sets .framed)
+.reveal .sync-legend-box { position: absolute; left: 0; right: 0; top: 100%; margin-top: 0.5em; text-align: center; }
+.reveal .sync-legend img { max-width: 100%; max-height: 240px; margin: 0; }
+.reveal .sync-fig.framed img, .reveal .sync-legend.framed img { border: 1px solid $comp-line; box-sizing: border-box; }
+.reveal .sync-credit { font-size: 0.4em; font-style: italic; color: $comp-muted; margin-top: 0.25em; }
+// .takeaway: the slide's message, last, at the bottom
+.reveal .takeaway { margin-top: auto; margin-bottom: 0.3em; background: $comp-tint; border-left: 6px solid $brand-secondary; color: $brand-primary; font-weight: 600; font-size: 0.72em; line-height: 1.3; padding: 0.4em 0.8em; }
+.reveal .takeaway p { margin: 0; }
+
+// .spotlight (charter.lua): on its click the slide fades under a white veil and the card grows from the link
+// strip, bottom left, to the centre, its colour moving from secondary to primary. `fixed`: the transformed
+// .slides box is its containing block, so it covers the whole slide, not the column it sits in
+.reveal .slides section .spotlight { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 30; display: flex; align-items: center; justify-content: center; background: rgba(255, 255, 255, 0.86); pointer-events: none; margin: 0; }
+.reveal .slides section .fragment.spotlight { transition: opacity 0.45s; }
+.reveal .spotlight-card { max-width: 62%; background: #fff; border: 3px solid $brand-secondary; border-radius: 16px; overflow: hidden; box-shadow: 0 14px 44px rgba(0, 0, 0, 0.16); transform: translate(-62%, 62%) scale(0.22); transition: transform 0.65s cubic-bezier(0.2, 0.8, 0.2, 1), border-color 0.65s; pointer-events: auto; }
+.reveal .spotlight.visible .spotlight-card { transform: none; border-color: $brand-primary; }
+.reveal .spotlight-label { background: $brand-secondary; color: #fff; font-size: 0.5em; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; padding: 0.45em 1.1em; transition: background 0.65s; }
+.reveal .spotlight.visible .spotlight-label { background: $brand-primary; }
+.reveal .spotlight-body { padding: 0.6em 1.1em 0.8em; font-size: 0.78em; line-height: 1.35; color: $comp-text; text-align: left; }
+.reveal .spotlight-body p { margin: 0 0 0.35em; }
+.reveal .spotlight-body strong { color: $brand-primary; }

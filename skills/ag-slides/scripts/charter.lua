@@ -11,6 +11,16 @@ local bg_rel = bg:match("(_extensions/.*)$") or bg
 
 local footer = ""
 
+-- the template mark (backgrounds/mark.*), nil when the charter has none
+local function charter_mark()
+  for _, f in ipairs(pandoc.system.list_directory(bg)) do
+    if f:match("^mark%.") then return bg_rel .. "/" .. f end
+  end
+end
+local sync_steps = 0  -- clicks used by the last `.sync`, for the `.takeaway` after it
+local last_step = 0   -- last beamer overlay used on the slide, for a `.spotlight` after it
+local legend_id = 0   -- beamer: unique tikz names for `.sync` legends
+
 local function role_of(h)
   if h.classes:includes("plain") then return "plain" end
   if h.level == 1 then return "section" end
@@ -58,6 +68,8 @@ function Meta(meta)
 end
 
 function Header(h)
+  sync_steps = 0
+  last_step = 0
   if not quarto.doc.is_format("revealjs") or h.attributes["background-image"] then return nil end
   local role = role_of(h)
   if role then
@@ -198,18 +210,227 @@ local function diagram(div)
   if quarto.doc.is_format("revealjs") then
     return pandoc.RawBlock("html", '<div class="diagram">' .. read_all(deck_file("_diagrams/" .. stem .. ".svg")) .. "</div>")
   elseif quarto.doc.is_format("beamer") then
-    local out = {}
-    for n = 0, tonumber(read_all(deck_file("_diagrams/" .. stem .. ".steps"))) - 1 do
-      out[#out + 1] = string.format("\\includegraphics<%d>[width=\\linewidth]{%s}", n + 1, deck_file("_diagrams/" .. stem .. "-" .. n .. ".pdf"))
+    local out, steps = {}, tonumber(read_all(deck_file("_diagrams/" .. stem .. ".steps")))
+    -- with a link strip (links.lua) the picture stops above it
+    local size = div.attributes.links and "width=\\linewidth,height=0.66\\paperheight,keepaspectratio" or "width=\\linewidth"
+    for n = 0, steps - 1 do  -- the last step stays, under a `.spotlight` that may follow
+      out[#out + 1] = string.format("\\includegraphics<%d%s>[%s]{%s}", n + 1, n == steps - 1 and "-" or "", size,
+                                    deck_file("_diagrams/" .. stem .. "-" .. n .. ".pdf"))
     end
+    last_step = steps
     return pandoc.RawBlock("latex", table.concat(out, "\n"))
   end
   return pandoc.BulletList({ { pandoc.Plain({ pandoc.Str("diagram") }) } })  -- removed by pptx_components.py
 end
 
+-- `.sync`: points on the left (`::: {.point fig="..." credit="..."}`), each with its figure on the right
+-- (a point without `fig` keeps the previous one; `icon=` replaces the bullet; `legend=` puts the figure's legend,
+-- cropped out of it, in the left column under the points). Each click shows the next point and swaps the figure;
+-- earlier points half-fade. A `.takeaway` after it
+-- comes on the next click, at the bottom of the slide (on its own, it comes on the first click).
+-- A `.spotlight` inside it, after point k, takes the click between point k and point k + 1.
+local function sync_points(div)
+  local pts, spot, k = {}, nil, nil
+  for _, c in ipairs(div.content) do
+    if c.t == "Div" and c.classes:includes("spotlight") then
+      spot, k = c, #pts
+    elseif c.t == "Div" then
+      pts[#pts + 1] = c
+    end
+  end
+  return pts, spot, k
+end
+
+-- click that shows point i of a `.sync` whose spotlight follows point k (revealjs fragment index; beamer overlay - 1)
+local function sync_click(i, k)
+  return i - 1 + ((k and i > k) and 1 or 0)
+end
+
+local function frag(div, cls, idx)
+  div.classes:extend({ "fragment", cls })
+  div.attributes["data-fragment-index"] = tostring(idx)
+  return div
+end
+
+-- figures of a `.sync`: each runs from its point to the next point that has one; `live="url"` shows the page
+-- itself in revealjs, `fig` stays the picture elsewhere; `poster` stands in for an animated `fig` in beamer and pptx
+local framed  -- figures whose border differs from the slide: diagram.py lists them in _diagrams/frames.json
+
+local function sync_figs(pts)
+  if not framed then
+    framed = {}
+    local f = io.open(deck_file("_diagrams/frames.json"), "r")
+    if f then
+      for _, path in ipairs(pandoc.json.decode(f:read("a"))) do framed[path] = true end
+      f:close()
+    end
+  end
+  local out = {}
+  for i, p in ipairs(pts) do
+    if p.attributes.fig then
+      if #out > 0 then out[#out].last = i - 1 end
+      out[#out + 1] = { first = i, last = #pts, fig = p.attributes.fig, live = p.attributes.live, credit = p.attributes.credit,
+                        poster = p.attributes.poster,
+                        frame = framed[p.attributes.fig], legend = p.attributes.legend }
+    end
+  end
+  return out
+end
+
+local spotlight_html, spotlight_tex
+
+local function sync(div)
+  local pts, spot, k = sync_points(div)
+  local n = #pts
+  local function click(i) return sync_click(i, k) end
+  sync_steps = n + (spot and 1 or 0)
+  last_step = sync_steps
+  if quarto.doc.is_format("revealjs") then
+    local text, figs = {}, {}
+    for i, p in ipairs(pts) do
+      local point = pandoc.Div(p.content, pandoc.Attr("", { "sync-point" }))
+      if p.attributes.icon then
+        point.classes:insert("has-icon")
+        point.content:insert(1, pandoc.RawBlock("html", '<span class="ico">' .. read_all(deck_file("_icons/" .. p.attributes.icon .. ".svg")) .. "</span>"))
+      end
+      if n > 1 then
+        if i == 1 then frag(point, "semi-fade-out", click(2)) else frag(point, "fade-in-then-semi-out", click(i)) end
+      end
+      text[#text + 1] = point
+    end
+    -- point i shows on fragment i - 1; a figure fades in with its first point and out with the next figure
+    local live = false
+    for _, f in ipairs(sync_figs(pts)) do
+      live = live or f.live ~= nil
+      local media = f.live
+        and pandoc.RawBlock("html", '<div class="sync-live"><iframe src="' .. f.live .. '" loading="lazy"></iframe></div>')
+        or pandoc.Plain({ pandoc.Image({}, f.fig) })
+      local fig = pandoc.Div({ media }, pandoc.Attr("", { "sync-fig" }))
+      if f.frame then fig.classes:insert("framed") end
+      if f.credit and not f.live then fig.content:insert(pandoc.Div(pandoc.Plain(pandoc.Str(f.credit)), pandoc.Attr("", { "sync-credit" }))) end
+      local function shown(d)
+        if f.last < n then d = frag(pandoc.Div({ d }), "fade-out", click(f.last + 1)) end
+        if f.first > 1 then d = frag(pandoc.Div({ d }), "fade-in", click(f.first)) end
+        d.classes:insert("sync-cell")
+        return d
+      end
+      figs[#figs + 1] = shown(fig)
+      if f.legend then  -- under its own point, over the room of the points still to come
+        local leg = pandoc.Div({ pandoc.Plain({ pandoc.Image({}, f.legend) }) }, pandoc.Attr("", { "sync-legend", framed[f.legend] and "framed" or nil }))
+        if f.last < n then leg = frag(pandoc.Div({ leg }), "fade-out", click(f.last + 1)) end
+        leg.classes:insert("sync-legend-box")
+        text[f.first].content:insert(leg)
+      end
+    end
+    local out = { pandoc.Div(text, pandoc.Attr("", { "sync-points" })), pandoc.Div(figs, pandoc.Attr("", { "sync-figs" })) }
+    -- a live page takes the right half of the slide and covers the template mark: draw the mark in the left half
+    local mark = live and charter_mark()
+    if mark then out[#out + 1] = pandoc.Div(pandoc.Plain({ pandoc.Image({}, mark) }), pandoc.Attr("", { "sync-live-mark" })) end
+    if spot then out[#out + 1] = frag(spotlight_html(spot), "fade-in-then-out", k) end
+    return pandoc.Div(out, pandoc.Attr("", { "sync" }))
+  elseif quarto.doc.is_format("beamer") then
+    local items, figs, legends = {}, {}, {}
+    for _, f in ipairs(sync_figs(pts)) do
+      local credit = f.credit and ("\\\\[2pt]{\\tiny\\itshape\\color{brandForeground!60}" .. tex_esc(f.credit) .. "}") or ""
+      local img = string.format("\\includegraphics[width=\\dimexpr\\linewidth-2pt,height=0.5\\textheight,keepaspectratio]{%s}", deck_file(f.poster or f.fig))
+      if f.frame then img = "{\\setlength\\fboxsep{0pt}\\fcolorbox{brandForeground!25}{white}{" .. img .. "}}" end
+      local span = string.format("%d-%s", click(f.first) + 1, f.last == n and "" or tostring(click(f.last + 1)))
+      figs[#figs + 1] = string.format("\\only<%s>{%s%s}", span, img, credit)
+      if f.legend then legends[f.first] = { span = span, file = deck_file(f.legend) } end
+    end
+    -- a legend hangs under its own point, over the room of the points still to come, so the layout never moves
+    for i, p in ipairs(pts) do
+      local tex = pandoc.write(pandoc.Pandoc(p.content), "latex"):gsub("%s+$", "")
+      local leg = legends[i]
+      if leg then
+        legend_id = legend_id + 1
+        local id = "synclegend" .. legend_id
+        tex = string.format("\\tikz[remember picture,overlay]\\coordinate (%s);%s\\tikz[remember picture,overlay]{\\coordinate (%s-end);"
+          .. "\\node[anchor=north,inner sep=0pt,xshift=0.5\\linewidth,yshift=-1ex] at (%s |- %s-end) {\\only<%s>{\\includegraphics[width=0.85\\linewidth,height=0.25\\textheight,keepaspectratio]{%s}}};}",
+          id, tex, id, id, id, leg.span, leg.file)
+      end
+      items[#items + 1] = string.format("\\item<%d-> {\\color<%d->{brandForeground!40}%s\\par}", click(i) + 1, click(i) + 2, tex)
+    end
+    return pandoc.RawBlock("latex", table.concat({
+      "\\begin{columns}[c]", "\\begin{column}{0.42\\textwidth}", "\\setbeamerfont{itemize/enumerate body}{size=\\footnotesize}", "\\begin{itemize}\\setlength{\\itemsep}{3pt}", table.concat(items, "\n"), "\\end{itemize}",
+      "\\end{column}", "\\begin{column}{0.56\\textwidth}", "\\centering", table.concat(figs, "\n"), "\\end{column}", "\\end{columns}",
+      spot and spotlight_tex(spot, k + 1) or "" }, "\n"))
+  end
+  return pandoc.BulletList({ { pandoc.Plain({ pandoc.Str("sync") }) } })  -- removed by pptx_components.py
+end
+
+-- `.spotlight`: one message on its own, on the click after everything else on the slide. The slide fades under a
+-- white veil and a card grows from the link strip (bottom left) to the centre, changing colour on the way.
+-- `label="..."` heads the card, the div's content fills it; `talk="<Indico contribution URL>"` fills it from
+-- _talks.json (talks.py) instead: speaker, title, day, time, room, link.
+local function spotlight_parts(div)
+  local url = div.attributes.talk
+  if not url then return div.attributes.label or "", div.content end
+  local f = assert(io.open("_talks.json", "r"), ".spotlight talk=: no _talks.json; is talks.py in the pre-render hook?")
+  local talks = pandoc.json.decode(f:read("a"), false)
+  f:close()
+  local t = assert(talks[url], ".spotlight talk=: " .. url .. " is not a talk link in links.yml")
+  local y, mo, d, hh, mi = t.start:match("(%d+)-(%d+)-(%d+)T(%d+):(%d+)")
+  local when = os.date("%a %d %b, %H:%M", os.time({ year = y, month = mo, day = d, hour = hh, min = mi }))
+  return div.attributes.label or "In this workshop", {
+    pandoc.Para({ pandoc.Strong(pandoc.Str(t.speakers)) }),
+    pandoc.Para(pandoc.Str(t.title)),
+    pandoc.Para({ pandoc.Str(when .. (t.room ~= "" and (" · " .. t.room) or "")), pandoc.Space(),
+                  pandoc.Link("Indico", url, "", pandoc.Attr("", {}, { target = "_blank" })) }),
+  }
+end
+
+function spotlight_html(div)
+  local label, blocks = spotlight_parts(div)
+  return pandoc.Div({ pandoc.Div({ pandoc.Div(pandoc.Plain(pandoc.Str(label)), pandoc.Attr("", { "spotlight-label" })),
+                                   pandoc.Div(blocks, pandoc.Attr("", { "spotlight-body" })) }, pandoc.Attr("", { "spotlight-card" })) },
+                    pandoc.Attr("", { "spotlight" }))
+end
+
+-- the beamer card on overlay `step` only
+function spotlight_tex(div, step)
+  local label, blocks = spotlight_parts(div)
+  local tex = pandoc.write(pandoc.Pandoc(blocks), "latex"):gsub("%s+$", "")
+  return string.format(
+    "\\only<%d>{\\begin{tikzpicture}[remember picture,overlay]\\fill[white,opacity=0.85] (current page.south west) rectangle (current page.north east);"
+    .. "\\node[draw=brandPrimary,line width=1.5pt,rounded corners=6pt,fill=white,text width=0.58\\paperwidth,inner sep=10pt] at (current page.center)"
+    .. " {{\\scriptsize\\bfseries\\color{brandSecondary}%s}\\par\\smallskip\\small %s};\\end{tikzpicture}}",
+    step, tex_esc(label:upper()), tex)
+end
+
+local function spotlight(div)
+  if quarto.doc.is_format("revealjs") then
+    local d = spotlight_html(div)
+    d.classes:insert("fragment")
+    return d
+  elseif quarto.doc.is_format("beamer") then
+    return pandoc.RawBlock("latex", spotlight_tex(div, math.max(last_step, 1) + 1))
+  end
+  return pandoc.BulletList({ { pandoc.Plain({ pandoc.Str("spotlight") }) } })  -- removed by pptx_components.py
+end
+
+local function takeaway(div)
+  local step = sync_steps + 1
+  sync_steps = 0
+  last_step = step
+  if quarto.doc.is_format("revealjs") then
+    div.classes:insert("fragment")
+    div.attributes["data-fragment-index"] = tostring(math.max(step - 1, 0))
+    return div
+  elseif quarto.doc.is_format("beamer") then
+    local tex = pandoc.write(pandoc.Pandoc(div.content), "latex"):gsub("%s+$", "")
+    return pandoc.RawBlock("latex", string.format(
+      "\\vfill\\uncover<%d->{\\colorbox{brandSecondary!14}{\\parbox{\\dimexpr\\linewidth-2\\fboxsep}{\\footnotesize\\color{brandPrimary}\\bfseries %s}}}", step, tex))
+  end
+  return pandoc.BulletList({ { pandoc.Plain({ pandoc.Str("takeaway") }) } })  -- removed by pptx_components.py
+end
+
 function Div(div)
   local reveal = quarto.doc.is_format("revealjs")
   if div.classes:includes("diagram") then return diagram(div) end
+  if div.classes:includes("sync") then return sync(div) end
+  if div.classes:includes("takeaway") then return takeaway(div) end
+  if div.classes:includes("spotlight") and not div.classes:includes("in-sync") then return spotlight(div) end
   if div.classes:includes("timeline") then
     local evs = timeline_events(div)
     return reveal and timeline_html(div, evs) or timeline_columns(evs)
@@ -290,6 +511,24 @@ local function contents(doc)
   return doc
 end
 
+-- text of a `.sync` point or a `.takeaway` as runs, bold where the source is **strong**
+local function runs(blocks)
+  local out = {}
+  for _, b in ipairs(blocks) do
+    if b.content then
+      if #out > 0 then out[#out + 1] = { t = " " } end
+      for _, il in ipairs(b.content) do
+        if il.t == "Space" or il.t == "SoftBreak" then
+          out[#out + 1] = { t = " " }
+        else
+          out[#out + 1] = { t = pandoc.utils.stringify(il), b = il.t == "Strong" or nil }
+        end
+      end
+    end
+  end
+  return out
+end
+
 local function record(doc)
   if not quarto.doc.is_format("pptx") then return nil end
   local slides, title = {}, nil
@@ -299,6 +538,26 @@ local function record(doc)
       if b.attributes.logo then slides[#slides + 1] = { title = title, kind = "logo", src = b.attributes.logo } end
     elseif b.t == "Div" and title and b.classes:includes("diagram") then
       slides[#slides + 1] = { title = title, kind = "diagram", src = b.attributes.src }
+    elseif b.t == "Div" and title and b.classes:includes("sync") then
+      local items, pts, spot, k = {}, sync_points(b)
+      for _, c in ipairs(pts) do
+        items[#items + 1] = { runs = runs(c.content), fig = c.attributes.poster or c.attributes.fig, credit = c.attributes.credit, icon = c.attributes.icon,
+                              legend = c.attributes.legend }
+      end
+      slides[#slides + 1] = { title = title, kind = "sync", items = items, spot = k }
+      if spot then
+        local label, blocks = spotlight_parts(spot)
+        local paras = {}
+        for _, bl in ipairs(blocks) do paras[#paras + 1] = runs({ bl }) end
+        slides[#slides + 1] = { title = title, kind = "spotlight", label = label, paras = paras, after = k }
+      end
+    elseif b.t == "Div" and title and b.classes:includes("takeaway") then
+      slides[#slides + 1] = { title = title, kind = "takeaway", runs = runs(b.content) }
+    elseif b.t == "Div" and title and b.classes:includes("spotlight") then
+      local label, blocks = spotlight_parts(b)
+      local paras = {}
+      for _, bl in ipairs(blocks) do paras[#paras + 1] = runs({ bl }) end
+      slides[#slides + 1] = { title = title, kind = "spotlight", label = label, paras = paras }
     elseif b.t == "Div" and title and grid_kind(b) then
       local items = {}
       for _, c in ipairs(b.content) do
@@ -316,28 +575,20 @@ local function record(doc)
   f:close()
 end
 
--- `logo="file"` on a slide heading: the image right of the title (box from the template geometry), swapped
--- with the template mark when the charter has one (backgrounds/mark.*); pptx_components.py places it in pptx
+-- `logo="file"` on a slide heading: the project logo left in the title box, the title moved right (box from the
+-- template geometry, `logo_box` in charter.py); the template mark stays; pptx_components.py places it in pptx
 local function logo(doc)
   local reveal, tex = quarto.doc.is_format("revealjs"), quarto.doc.is_format("beamer")
   if not (reveal or tex) then return nil end
-  local mark
-  for _, f in ipairs(pandoc.system.list_directory(bg)) do
-    if f:match("^mark%.") then mark = bg_rel .. "/" .. f end
-  end
   local out = {}
   for _, b in ipairs(doc.blocks) do
     out[#out + 1] = b
     local src = b.t == "Header" and b.level == 2 and b.attributes.logo
     if src and reveal then
-      if mark then
-        out[#out + 1] = pandoc.Div({}, pandoc.Attr("", { "brand-cover" }))
-        out[#out + 1] = pandoc.Div(pandoc.Plain({ pandoc.Image({}, mark) }), pandoc.Attr("", { "brand-mark" }))
-      end
       out[#out + 1] = pandoc.Div(pandoc.Plain({ pandoc.Image({}, src) }), pandoc.Attr("", { "brand-logo" }))
     elseif src then
-      -- in the frame title: an overlay there takes no space, a block in the frame body pushes the content down
-      b.content:insert(pandoc.RawInline("latex", "\\brandlogo{" .. src .. "}"))
+      -- first in the frame title: an overlay there takes no space, and its \hspace moves the title text right
+      b.content:insert(1, pandoc.RawInline("latex", "\\brandlogo{" .. src .. "}"))
     end
   end
   doc.blocks = out
@@ -366,4 +617,13 @@ function Pandoc(doc)
   return doc
 end
 
-return { { Meta = Meta }, { Pandoc = contents }, { Pandoc = record }, { Header = Header, Div = Div }, { Pandoc = logo }, { Pandoc = Pandoc } }
+-- a `.spotlight` inside a `.sync` is drawn by the `.sync`; the Div pass runs bottom-up, so mark it first
+local function in_sync(div)
+  if not div.classes:includes("sync") then return nil end
+  for _, c in ipairs(div.content) do
+    if c.t == "Div" and c.classes:includes("spotlight") then c.classes:insert("in-sync") end
+  end
+  return div
+end
+
+return { { Meta = Meta }, { Pandoc = contents }, { Pandoc = record }, { Div = in_sync }, { Header = Header, Div = Div }, { Pandoc = logo }, { Pandoc = Pandoc } }

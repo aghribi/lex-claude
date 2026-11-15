@@ -1,6 +1,6 @@
 # /// script
 # requires-python = ">=3.10"
-# dependencies = ["pyyaml>=6"]
+# dependencies = ["pillow>=10", "pyyaml>=6"]
 # ///
 """Lint a Quarto deck source before rendering. Thresholds come from the CAS 2026 design contract.
 
@@ -10,6 +10,7 @@ HIGH blocks delivery, MEDIUM is a judgement call. Exit code 1 when any HIGH is f
 """
 import argparse, pathlib, re, sys
 import yaml
+from PIL import Image
 
 WORDS = (70, 100)       # per slide: target, hard limit
 ELEMENTS = (3, 4)       # bullets or boxes per slide
@@ -102,12 +103,24 @@ if links.exists():
         if norm(title) not in titles:
             findings.append(("HIGH", "links.yml", f"no slide titled {title!r}: its links would be dropped"))
         for kind, *_ in items:
-            if kind not in ("git", "data", "info", "ref"):
+            if kind != "ref" and not (pathlib.Path(__file__).parent / "icons" / f"{kind}.svg").exists():
                 findings.append(("HIGH", "links.yml", f"{title!r}: unknown kind {kind!r}"))
 
 minutes = a.minutes or fm.get("duration")
 if minutes and content > minutes / MIN_PER_SLIDE:
     findings.append(("HIGH", "deck", f"{content} content slides for {minutes:g} min (max {int(minutes / MIN_PER_SLIDE)})"))
+
+# a `.sync` figure shows in about 790 x 430 px of a 1600 px slide: blown up by more than 30 % it turns soft,
+# and the figure has to be reconstructed (redrawn, re-exported from the source, or the source data plotted again)
+for fig in sorted(set(re.findall(r'\bfig="([^"]+)"', text))):
+    path = a.qmd.parent / fig
+    if not path.exists():
+        findings.append(("HIGH", fig, "missing figure"))
+        continue
+    with Image.open(path) as im:
+        scale = min(790 / im.width, 430 / im.height)
+    if scale > 1.3:
+        findings.append(("HIGH", fig, f"{im.width}x{im.height} px, shown at x{scale:.1f}: reconstruct it"))
 
 for level, where, msg in sorted(findings, key=lambda f: f[0] != "HIGH"):
     print(f"{level:6} {where}: {msg}")

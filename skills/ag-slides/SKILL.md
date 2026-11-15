@@ -67,7 +67,7 @@ format:
   <P>-revealjs: default
 ```
 
-Every deck gets a "Contents" slide after the title, generated from the `#` and `##` headings by `charter.lua`: never write one by hand. `{.nocontents}` keeps a `##` slide off it; `{subtitle="..."}` on a `#` heading shows that line instead of the section's slide list. Slide roles: `#` section divider, `##` content, `## Title {.plain}` plain background. `## Title {logo="figures/logos/x.png"}` puts a project logo right of the title, in all three formats (box from the template geometry, `logo_box` in `charter.py`). When `charter.yml` names the template's logo shape (`mark: Picture 1`), the project logo takes that place and the template logo moves below it. One block per slide: a list or a table, never both, and no text after a table (pptx moves it to an extra slide). Tables: at most 4 columns, 7 rows, about 10 words per cell. Details that do not fit go in `::: {.notes}`. Two columns: `:::: {.columns}` with two `::: {.column}`. Speaker notes: `::: {.notes}`. Figures: files in `figures/` (draw.io sources next to the export); numbers on slides come from code or a cited source, never typed from memory.
+Every deck gets a "Contents" slide after the title, generated from the `#` and `##` headings by `charter.lua`: never write one by hand. `{.nocontents}` keeps a `##` slide off it; `{subtitle="..."}` on a `#` heading shows that line instead of the section's slide list. Slide roles: `#` section divider, `##` content, `## Title {.plain}` plain background. `## Title {logo="figures/logos/x.png"}` puts a project logo left in the title box and moves the title right, in all three formats (box from the template geometry, `logo_box` and `logo_shift` in `charter.py`); the template logo stays on the right. One block per slide: a list or a table, never both, and no text after a table (pptx moves it to an extra slide). Tables: at most 4 columns, 7 rows, about 10 words per cell. Details that do not fit go in `::: {.notes}`. Two columns: `:::: {.columns}` with two `::: {.column}`. Speaker notes: `::: {.notes}`. Figures: files in `figures/` (draw.io sources next to the export); numbers on slides come from code or a cited source, never typed from memory.
 
 Re-run `charter.py deck` after every charter rebuild.
 
@@ -86,9 +86,15 @@ Every charter ships `components.scss` (colours from `$brand-*`) and the filter r
 | `::: {.timeline months=50 now=1}` over `- M8 D2.1 Title` items (ids starting `MS` are milestones) | axis, deliverables above, milestones below, labels stacked so none overlap | two tables in columns |
 | `[T2.3]{.tag}` | small pill | text |
 | `[Source: ...]{.credit}` (no image on the slide) | small grey right line | paragraph |
+| `::: {.spotlight label="..."}` with any content, or `::: {.spotlight talk="<Indico URL>"}` | one message on its own, on the click after everything else on the slide: the slide fades under a white veil and the card grows from the link strip to the centre, changing colour; `talk=` fills it from `_talks.json` (speaker, title, day, time, room, link). For a talk to go and see, a concept, a key definition. Inside a `.sync`, after point k, it takes the click between point k and point k + 1 and leaves with point k + 1 | pptx: veil and card as one group, one more click, over the link strip; beamer: one more overlay |
+| `::: {.sync}` of `::: {.point fig="..." credit="..."}`, optional `live="url"`, `icon="name"` | one-line points left, the figure of the current point right; each click shows the next point, swaps the figure, half-fades the previous point; `live=` shows the web page itself over the right half of the slide, clickable, title and footer moved left; `poster="file"` stands in for an animated `fig` (GIF) in beamer and pptx; a point without `fig` keeps the previous figure; `legend="file"` (a legend cropped out of a figure where it takes too much space) shows centred under its point, with its figure; a fourth field n on a links.yml entry ties that link to the n-th point | pptx: shapes and clicks; beamer: columns with overlays |
+| `::: {.takeaway}` one sentence `:::` | the slide message, a tinted band at the bottom, on the click after the last point | pptx: band; beamer: box |
 | `![Source: ...](figures/x.png)` | caption as a small credit | caption (beamer: no "Figure n:") |
 
 Rules:
+- Every figure is readable and understandable at its size on the slide: axes with labels and units, text no smaller than the slide credits. Check it at display size (a `.sync` figure gets about 790 x 430 px of a 1600 px slide). Crop to the panel that carries the point, take a figure's native image or render a vector figure at high zoom, never a whole page or a multi-panel figure squeezed small. A figure whose background is opaque and not the slide colour gets a thin frame (automatic for `.sync` figures: `diagram.py` lists them, all three formats draw it). A needed figure whose resolution is too low (`check_deck.py` flags more than 30 % upscaling) is reconstructed: redrawn from its source data or its structure, never upscaled.
+- A figure appears on one slide only; never reuse the same figure on two slides.
+- The default content slide is `.sync` + `.takeaway` (the speaker's method: title, then left text with a proof per point on the right, then the message). Points are one line, a bold label and a fragment; details go to the notes. Diagram step captions are drawn as the same message band.
 - At most 4 tiles, cards or steps per slide (`check_deck.py` counts them); about 15 words per card. Timeline: at most 14 events, titles of 2 to 4 words; `label-up` and `label-down` set the label width in months when the defaults (months/4, months/6) collide.
 - Animation, revealjs only: slides fade (`transition: fade`), tiles and cards rise in turn when their slide opens, the timeline axis draws itself and events appear in month order. `.build` turns children into fragments the speaker steps through: use it where the order is the message (a pipeline, a plan), not on every slide. `prefers-reduced-motion` turns entrance animations off.
 - Content is centred vertically in the template body box.
@@ -103,11 +109,17 @@ Every link on a slide goes in the deck's `links.yml`, never in the slide text. `
 
 ```yaml
 ESS - finding faults without labels:
-  - [git, Team code, https://github.com/org/repo/tree/main/team]   # git icon: repo or folder
+  - [github, org/repo, https://github.com/org/repo]                # host logo: github, gitlab; git for other hosts
   - [data, Dataset, https://doi.org/...]                           # data icon: only where the data is public
+  - [paper, "Author et al., PRAB 27 (2024)", https://doi.org/...]  # article icon: a paper is behind the slide
+  - [web, Living review, https://...]                              # globe: a website or app to open
   - [info, Challenge page, https://...]                            # (i): page with more information
-  - [ref, "Author et al., PRAB 27 (2024)", https://doi.org/...]    # footnote style, no icon: paper, talk, Indico
+  - [ref, "Speaker, Workshop (2026)", https://indico...]           # footnote style, no icon: talk, Indico
+  - [talk, https://indico.../event/<id>/contributions/<db_id>/]    # a talk at the same event: pill chip, microphone
+  - [paper, "Author et al., PRAB 27 (2024)", https://doi.org/..., 2]  # 4th field: shown with the 2nd point of the slide's .sync
 ```
+
+A talk at the same workshop or conference is a `talk` link: only the Indico contribution URL, plus an optional n to tie it to a `.sync` point. `talks.py` (pre-render, after `diagram.py`) fetches speaker, title, day, time and room from the event's public export and writes `_talks.json` (the chip label, "K. H. Kim · Mon 17:20", and the title shown on hover in revealjs) and `_talks.qmd`, a "Related talks here" slide listing every linked talk in time order; include it with `{{< include _talks.qmd >}}` before the closing slide. Never type a speaker, time or room by hand: programmes move. Offline, the last `_talks.json` is kept.
 
 Icons sit in `scripts/icons/` (lucide ISC, Simple Icons CC0); `charter.py build` renders them in the charter's secondary colour, so rebuild the charter once after updating the skill.
 
