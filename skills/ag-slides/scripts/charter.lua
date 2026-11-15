@@ -678,6 +678,15 @@ local LEAD_JS = "<script>window.addEventListener('load', function () { function 
 local LEAD_TEX = "\\only<1>{\\color{white}\\setbeamercolor{itemize/enumerate body}{fg=white}"
   .. "\\setbeamercolor{itemize item}{fg=white}}"
 
+-- revealjs loads images a few slides ahead, so a GIF that plays once would end before it is seen: restart the
+-- GIFs of a slide when it is shown, and of a fragment when it appears (a new query string restarts the animation)
+local GIF_JS = "<script>window.addEventListener('load', function () { function go(root) {"
+  .. " if (!root) return; root.querySelectorAll('img').forEach(function (i) {"
+  .. " var s = i.getAttribute('src') || i.getAttribute('data-src') || '';"
+  .. " if (!/\\.gif(\\?|$)/i.test(s)) return; i.src = s.split('?')[0] + '?t=' + Date.now(); }); }"
+  .. " Reveal.on('slidechanged', function (e) { go(e.currentSlide); });"
+  .. " Reveal.on('fragmentshown', function (e) { go(e.fragment); }); go(Reveal.getCurrentSlide()); });</script>"
+
 local function lead_tints(doc)
   if quarto.doc.is_format("beamer") then  -- reverse contrast: light body text on the first overlay
     local out = {}
@@ -698,6 +707,7 @@ local function lead_tints(doc)
     end
   end
   if any then out[#out + 1] = pandoc.RawBlock("html", LEAD_JS) end
+  out[#out + 1] = pandoc.RawBlock("html", GIF_JS)
   doc.blocks = out
   return doc
 end
