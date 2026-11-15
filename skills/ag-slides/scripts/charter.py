@@ -1,11 +1,12 @@
 # /// script
 # requires-python = ">=3.10"
-# dependencies = ["python-pptx>=1.0", "pyyaml>=6"]
+# dependencies = ["numpy>=1.26", "pillow>=10", "python-pptx>=1.0", "pyyaml>=6"]
 # ///
 """Project graphical charter for Quarto decks (pptx, beamer, revealjs) built from the project's own pptx template.
 
   charter.py build <charter_dir>                       template + _brand.yml + charter.yml -> <charter_dir>/build/
   charter.py deck <charter_dir> <deck_dir>             install or refresh the charter extension in a deck, write its _quarto.yml
+  charter.py lead <charter_dir>                        refresh backgrounds/lead.png from content.png (no PowerPoint)
   charter.py reference [<deck.qmd>]                    deck _reference.pptx with the deck footer filled (pre-render step;
                                                        the charter comes from `charter:` in the deck's _quarto.yml)
 
@@ -254,6 +255,28 @@ def write_mark(layouts, cfg, out):
         (out / f"mark.{s.image.ext}").write_bytes(s.image.blob)
 
 
+LEADS = {"lead": "foreground", "lead2": "primary"}  # dark ground of each; lead2 for a lead right after another
+
+
+def write_lead(brand, out):
+    """`## Title {.lead}`, the first slide of a project or part, in reverse contrast: the content background with
+    its paper turned to a dark ground (foreground colour, or primary for lead2) and its dark marks (logo text) to
+    paper; coloured marks keep their colour. Two grounds, so two project slides in a row differ."""
+    import numpy as np
+    from PIL import Image
+    c = colors(brand)
+    rgb = lambda k: np.array([int(c[k][i:i + 2], 16) for i in (0, 2, 4)], float)
+    paper, ink = rgb("background"), rgb("foreground")
+    im = np.asarray(Image.open(out / "content.png").convert("RGB"), float)
+    lum = im @ [0.299, 0.587, 0.114]
+    chroma = (im.max(axis=2) - im.min(axis=2)) / 255  # not HSV saturation: dark navy ink would count as colour
+    w = np.clip(chroma * 4 - 0.3, 0, 1)[..., None]  # coloured marks keep their colour
+    t = np.clip((paper @ [0.299, 0.587, 0.114] - lum) / (paper @ [0.299, 0.587, 0.114] - ink @ [0.299, 0.587, 0.114]), 0, 1)[..., None]
+    for name, ground in LEADS.items():
+        grey = rgb(ground) + t * (paper - rgb(ground))  # paper -> ground, ink -> paper
+        Image.fromarray(np.clip(w * im + (1 - w) * grey, 0, 255).astype("uint8")).save(out / f"{name}.png")
+
+
 def pptx2pdf(src, dst):
     subprocess.run([HERE / "pptx2pdf.sh", src, dst], check=True)
 
@@ -351,7 +374,9 @@ def write_beamer(cfg, brand, geo, out):
          "\\newcommand\\brandbg[1]{\\begin{tikzpicture}[remember picture,overlay]\\node[anchor=north west,inner sep=0] at (current page.north west) {\\includegraphics[width=\\paperwidth,height=\\paperheight]{#1}};\\end{tikzpicture}}",
          "\\newcommand\\brandistitle{\\ifnum\\value{framenumber}=1 \\ifx\\inserttitle\\empty\\else T\\fi\\fi}",
          "\\providecommand\\brandtitlebg{\\brandbgdir/title.pdf}",
-         "\\setbeamertemplate{background}{\\if T\\brandistitle\\brandbg{\\brandtitlebg}\\else\\brandbg{\\brandbgdir/content.pdf}\\fi}",
+         # `.lead` frames: charter.lua puts \\brandlead in the frame title, typeset before the page ships out
+         "\\gdef\\brandislead{F}\\newcommand\\brandlead[1]{\\gdef\\brandislead{T}\\gdef\\brandleadfile{#1}}",
+         "\\setbeamertemplate{background}{\\if T\\brandistitle\\brandbg{\\brandtitlebg}\\else\\if T\\brandislead\\brandbg{\\brandbgdir/\\brandleadfile}\\else\\brandbg{\\brandbgdir/content.pdf}\\fi\\fi\\gdef\\brandislead{F}}",
          "\\newcommand\\brandfootbox[5]{\\node[anchor=north west,inner sep=0,text width=#3,align=#4,font=\\tiny,text=#5] at (#1,#2)}",
          "\\setbeamertemplate{footline}{\\if T\\brandistitle\\else\\begin{tikzpicture}[remember picture,overlay,x=\\paperwidth,y=-\\paperheight,shift={(current page.north west)}]",
          *[f"  \\brandfootbox{{{frac(c[pos]['x'],W)}}}{{{frac(c[pos]['y'],H)}}}{{{c[pos]['w']*k:.1f}pt}}{{{ {'l': 'left', 'ctr': 'center', 'r': 'right'}.get(c[pos]['align'], 'left') }}}{{brandFoot{pos}}}{{{text}}};"
@@ -515,6 +540,7 @@ def build(cdir):
     save_reference(p, out / "reference-base.pptx")
     render_backgrounds(p, layouts, cfg, ext / "backgrounds")
     write_mark(layouts, cfg, ext / "backgrounds")
+    write_lead(brand, ext / "backgrounds")
     render_layout_sheet(cdir, cfg, brand, out)
     write_beamer(cfg, brand, geo, ext)
     write_scss(cfg, brand, geo, ext)
@@ -594,6 +620,7 @@ if __name__ == "__main__":
     d = sub.add_parser("deck")
     d.add_argument("charter", type=pathlib.Path)
     d.add_argument("deck", type=pathlib.Path)
+    sub.add_parser("lead").add_argument("charter", type=pathlib.Path)
     r = sub.add_parser("reference")
     r.add_argument("qmd", type=pathlib.Path, nargs="?", default=pathlib.Path("slides.qmd"))
     a = ap.parse_args()
@@ -601,5 +628,8 @@ if __name__ == "__main__":
         build(a.charter.resolve())
     elif a.cmd == "deck":
         deck(a.charter.resolve(), a.deck.resolve())
+    elif a.cmd == "lead":
+        cfg, brand = load(a.charter.resolve())
+        write_lead(brand, a.charter.resolve() / "build" / "_extensions" / cfg["name"] / "backgrounds")
     else:
         reference(a.qmd.resolve())

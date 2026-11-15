@@ -159,7 +159,8 @@ def layers(spec, col, ddir):
     for step in spec["steps"]:
         ps = [p for el in step.get("draw", []) for p in prims(el, spec["size"], col, ddir)]
         if step.get("caption"):
-            ps += prims({"clear": [0, H - CAPTION_H, W, CAPTION_H]}, spec["size"], col, ddir)
+            # exactly under the band: a wider clear shows as a paper strip on a tinted (`.lead`) slide
+            ps += prims({"clear": [0, H - CAPTION_H + 4, W, CAPTION_H - 4]}, spec["size"], col, ddir)
             ps += caption(step["caption"], H - CAPTION_H + 4, W, CAPTION_H - 4, col)
         out.append(ps)
     return out

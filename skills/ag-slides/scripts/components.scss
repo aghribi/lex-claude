@@ -166,3 +166,27 @@ $comp-text: mix($body-color, #ffffff, 78%);  // secondary text: tile labels, car
 .reveal .spotlight-body { padding: 0.6em 1.1em 0.8em; font-size: 0.78em; line-height: 1.35; color: $comp-text; text-align: left; }
 .reveal .spotlight-body p { margin: 0 0 0.35em; }
 .reveal .spotlight-body strong { color: $brand-primary; }
+
+// .live (charter.lua): web pages over the whole slide, a tab bar on top. `fixed`, as for .spotlight: it covers
+// the whole slide, title and footer included
+.reveal .slides section .live-tabs { position: fixed; inset: 0; z-index: 25; display: flex; flex-direction: column; background: #fff; margin: 0; }
+.reveal .live-bar { display: flex; gap: 0.4em; padding: 0.35em 0.6em; background: $brand-primary; font-size: 0.42em; }
+.reveal .live-tab { font: inherit; border: 0; border-radius: 999px; padding: 0.3em 1em; background: rgba(255, 255, 255, 0.18); color: #fff; cursor: pointer; }
+.reveal .live-tab.on { background: #fff; color: $brand-primary; font-weight: 700; }
+.reveal .live-tabs iframe { flex: 1; width: 100%; max-width: none; max-height: none; border: 0; margin: 0; }
+.reveal .live-tabs iframe[hidden] { display: none; }
+
+// `.lead` (charter.lua): the tinted background as a layer behind the slide content, faded out at the first fragment
+.reveal .slides section .lead-tint { position: fixed; inset: 0; z-index: -1; background-size: contain; background-repeat: no-repeat; background-position: center; transition: opacity 0.6s; margin: 0; }
+.reveal .slides section.lead-off .lead-tint { opacity: 0; }
+// reverse contrast while the dark ground shows: light text, back to normal with the ground
+.reveal .slides section.lead > h2, .reveal .slides section.lead .sync-point, .reveal .slides section.lead .sync-point strong,
+.reveal .slides section.lead .brand-foot, .reveal .slides section.lead .sync-credit, .reveal .slides section.lead .links a { transition: color 0.6s; }
+.reveal .slides section.lead:not(.lead-off) > h2, .reveal .slides section.lead:not(.lead-off) .sync-point,
+.reveal .slides section.lead:not(.lead-off) .sync-point strong, .reveal .slides section.lead:not(.lead-off) .brand-foot,
+.reveal .slides section.lead:not(.lead-off) .sync-credit, .reveal .slides section.lead:not(.lead-off) .links a { color: $brand-background; }
+.reveal .slides section.lead .brand-foot span { transition: color 0.6s; }
+.reveal .slides section.lead:not(.lead-off) .brand-foot span { color: mix($brand-background, $brand-foreground, 75%); }
+// a project logo drawn for a light ground keeps one: a paper chip behind it
+.reveal .slides section.lead .brand-logo { border-radius: 8px; transition: background 0.6s; }
+.reveal .slides section.lead:not(.lead-off) .brand-logo { background: $brand-background; }

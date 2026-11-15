@@ -445,6 +445,16 @@ def draw_sync(slide, comp, body, col, fonts, ddir, take=None, spot=None):
     timeline(slide, clicks)
 
 
+def lead_background(slide, png, prs):
+    """`.lead` slide: the tinted content background as a full-slide picture behind every shape."""
+    pic = slide.shapes.add_picture(str(png), 0, 0, prs.slide_width, prs.slide_height)
+    pic.name = TAG + "lead"
+    tree = slide.shapes._spTree
+    tree.remove(pic._element)
+    tree.insert(2, pic._element)  # after nvGrpSpPr and grpSpPr: drawn first
+    return pic
+
+
 def title_slide(slide, data, geo, col, fonts):
     ph = next((p for p in slide.placeholders if p.placeholder_format.idx == 1), None)
     if ph is not None:
@@ -509,9 +519,13 @@ def main(ddir):
         comps = [c for c in data["slides"] if c["title"] == title]
         sync = next((c for c in comps if c["kind"] == "sync"), None)
         take = next((c for c in comps if c["kind"] == "takeaway"), None)
+        lead = None
         size = (prs.slide_width / 12700, prs.slide_height / 12700)
         inner = next((c for c in comps if c["kind"] == "spotlight" and c.get("after") is not None), None)
         for comp in comps:
+            if comp["kind"] == "lead":
+                lead = lead_background(slide, cdir / "build" / "_extensions" / cfg["name"] / "backgrounds" / comp["src"], prs)
+                continue
             if comp["kind"] == "logo":
                 place_logo(slide, ddir / comp["src"], logo_box(geo), logo_shift(geo))
                 continue
@@ -539,6 +553,14 @@ def main(ddir):
                         par._p.getparent().remove(par._p)
             append_click(slide, draw_spotlight(slide, comp, size, col, fonts))
             drawn += 1
+        if lead is not None:
+            # reverse contrast needs the text back to dark at the first click: kept on slides without clicks only
+            if slide._element.find(".//p:seq/p:cTn/p:childTnLst/p:par", NS) is not None:
+                lead._element.getparent().remove(lead._element)
+            elif slide.shapes.title is not None:
+                for par in slide.shapes.title.text_frame.paragraphs:
+                    for r in par.runs:
+                        r.font.color.rgb = RGBColor.from_string(col["paper"])
     prs.save(pptx)
     print(f"pptx_components: {drawn} components drawn in {pptx}")
 

@@ -67,9 +67,15 @@ function Meta(meta)
   return meta
 end
 
+-- `## Title {.lead}`: the first slide of a project or part, on a tinted content background until its first click
+-- (backgrounds/lead.png, or lead2.png right after another lead: attribute `lead`, set by lead_variants)
 function Header(h)
   sync_steps = 0
   last_step = 0
+  if h.attributes.lead and quarto.doc.is_format("beamer") then
+    h.content:insert(1, pandoc.RawInline("latex", "\\only<1>{\\brandlead{" .. h.attributes.lead .. ".png}\\color{white}}"))
+    return h
+  end
   if not quarto.doc.is_format("revealjs") or h.attributes["background-image"] then return nil end
   local role = role_of(h)
   if role then
@@ -409,6 +415,33 @@ local function spotlight(div)
   return pandoc.BulletList({ { pandoc.Plain({ pandoc.Str("spotlight") }) } })  -- removed by pptx_components.py
 end
 
+-- `.live`: web pages over the whole slide, one tab each: `::: {.tab label="..." src="<url>" poster="<png>"}`.
+-- revealjs: a tab bar on top (a click on it also gives the keyboard back to the slides), the pages load with the slide;
+-- beamer and pptx: the first tab's poster, a screenshot of the page.
+local function live(div)
+  local tabs = {}
+  for _, c in ipairs(div.content) do
+    if c.t == "Div" and c.classes:includes("tab") then tabs[#tabs + 1] = c.attributes end
+  end
+  if quarto.doc.is_format("revealjs") then
+    local bar, frames = {}, {}
+    for i, t in ipairs(tabs) do
+      bar[#bar + 1] = string.format('<button class="live-tab%s" onclick="liveTab(this, %d)">%s</button>',
+                                    i == 1 and " on" or "", i - 1, html_esc(t.label))
+      frames[#frames + 1] = string.format('<iframe data-src="%s"%s></iframe>', html_esc(t.src), i == 1 and "" or " hidden")
+    end
+    return pandoc.RawBlock("html", '<div class="live-tabs"><div class="live-bar">' .. table.concat(bar) .. "</div>"
+      .. table.concat(frames) .. "</div><script>function liveTab(b, i) { const r = b.closest('.live-tabs');"
+      .. " r.querySelectorAll('.live-tab').forEach((x, k) => x.classList.toggle('on', k === i));"
+      .. " r.querySelectorAll('iframe').forEach((f, k) => { f.hidden = k !== i; }); }</script>")
+  end
+  if quarto.doc.is_format("beamer") then
+    return pandoc.RawBlock("latex", string.format(
+      "\\begin{center}\\includegraphics[width=\\linewidth,height=0.62\\textheight,keepaspectratio]{%s}\\end{center}", deck_file(tabs[1].poster)))
+  end
+  return pandoc.Para({ pandoc.Image({}, tabs[1].poster) })
+end
+
 local function takeaway(div)
   local step = sync_steps + 1
   sync_steps = 0
@@ -430,6 +463,7 @@ function Div(div)
   if div.classes:includes("diagram") then return diagram(div) end
   if div.classes:includes("sync") then return sync(div) end
   if div.classes:includes("takeaway") then return takeaway(div) end
+  if div.classes:includes("live") then return live(div) end
   if div.classes:includes("spotlight") and not div.classes:includes("in-sync") then return spotlight(div) end
   if div.classes:includes("timeline") then
     local evs = timeline_events(div)
@@ -536,6 +570,7 @@ local function record(doc)
     if b.t == "Header" and b.level <= 2 then
       title = pandoc.utils.stringify(b.content)
       if b.attributes.logo then slides[#slides + 1] = { title = title, kind = "logo", src = b.attributes.logo } end
+      if b.attributes.lead then slides[#slides + 1] = { title = title, kind = "lead", src = b.attributes.lead .. ".png" } end
     elseif b.t == "Div" and title and b.classes:includes("diagram") then
       slides[#slides + 1] = { title = title, kind = "diagram", src = b.attributes.src }
     elseif b.t == "Div" and title and b.classes:includes("sync") then
@@ -617,6 +652,50 @@ function Pandoc(doc)
   return doc
 end
 
+-- `.lead` headings get `lead` = "lead", or "lead2" when the slide before was a lead with "lead": two in a row differ
+local function lead_variants(doc)
+  local prev
+  for _, b in ipairs(doc.blocks) do
+    if b.t == "Header" and b.level <= 2 then
+      local cur
+      if b.level == 2 and b.classes:includes("lead") then cur = prev == "lead" and "lead2" or "lead" end
+      if cur then b.attributes.lead = cur end
+      prev = cur
+    end
+  end
+  return doc
+end
+
+-- revealjs: the tint is a layer over the slide background, faded out once a fragment of the slide shows
+local LEAD_JS = "<script>window.addEventListener('load', function () { function f() {"
+  .. " document.querySelectorAll('.reveal .slides section.lead').forEach(function (s) {"
+  .. " s.classList.toggle('lead-off', !!s.querySelector('.fragment.visible')); }); }"
+  .. " ['ready', 'slidechanged', 'fragmentshown', 'fragmenthidden'].forEach(function (e) { Reveal.on(e, f); }); f(); });</script>"
+
+local function lead_tints(doc)
+  if quarto.doc.is_format("beamer") then  -- reverse contrast: light body text on the first overlay
+    local out = {}
+    for _, b in ipairs(doc.blocks) do
+      out[#out + 1] = b
+      if b.t == "Header" and b.attributes.lead then out[#out + 1] = pandoc.RawBlock("latex", "\\only<1>{\\color{white}}") end
+    end
+    doc.blocks = out
+    return doc
+  end
+  if not quarto.doc.is_format("revealjs") then return nil end
+  local out, any = {}, false
+  for _, b in ipairs(doc.blocks) do
+    out[#out + 1] = b
+    if b.t == "Header" and b.attributes.lead then
+      any = true
+      out[#out + 1] = pandoc.RawBlock("html", '<div class="lead-tint" style="background-image: url(\'' .. bg_rel .. "/" .. b.attributes.lead .. '.png\')"></div>')
+    end
+  end
+  if any then out[#out + 1] = pandoc.RawBlock("html", LEAD_JS) end
+  doc.blocks = out
+  return doc
+end
+
 -- a `.spotlight` inside a `.sync` is drawn by the `.sync`; the Div pass runs bottom-up, so mark it first
 local function in_sync(div)
   if not div.classes:includes("sync") then return nil end
@@ -626,4 +705,5 @@ local function in_sync(div)
   return div
 end
 
-return { { Meta = Meta }, { Pandoc = contents }, { Pandoc = record }, { Div = in_sync }, { Header = Header, Div = Div }, { Pandoc = logo }, { Pandoc = Pandoc } }
+return { { Meta = Meta }, { Pandoc = lead_variants }, { Pandoc = contents }, { Pandoc = record }, { Div = in_sync }, { Header = Header, Div = Div },
+         { Pandoc = logo }, { Pandoc = lead_tints }, { Pandoc = Pandoc } }
