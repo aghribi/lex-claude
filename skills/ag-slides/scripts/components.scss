@@ -185,6 +185,8 @@ $comp-text: mix($body-color, #ffffff, 78%);  // secondary text: tile labels, car
 .reveal .slides section.lead:not(.lead-off) > h2, .reveal .slides section.lead:not(.lead-off) .sync-point,
 .reveal .slides section.lead:not(.lead-off) .sync-point strong, .reveal .slides section.lead:not(.lead-off) .brand-foot,
 .reveal .slides section.lead:not(.lead-off) .sync-credit, .reveal .slides section.lead:not(.lead-off) .links a { color: $brand-background; }
+.reveal .slides section.lead:not(.lead-off) .links a.talk { border-color: $brand-background; }
+.reveal .slides section.lead:not(.lead-off) .sync-point::before { background: $brand-background; }
 .reveal .slides section.lead .brand-foot span { transition: color 0.6s; }
 .reveal .slides section.lead:not(.lead-off) .brand-foot span { color: mix($brand-background, $brand-foreground, 75%); }
 // a project logo drawn for a light ground keeps one: a paper chip behind it

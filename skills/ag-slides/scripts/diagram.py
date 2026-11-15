@@ -7,6 +7,7 @@
   diagram.py [deck_dir]        default: the current directory (Quarto runs it from the project)
 
 A spec is a YAML file: `size: [w, h]` in pt and `steps:`, each with an optional `caption:` and a `draw:` list.
+`ground: dark` draws it for a reverse-contrast `.lead` slide without clicks: light text, translucent boxes.
 Steps stack: what a step draws stays until a later step paints over it, so a `clear:` or a full-canvas image
 swaps the picture and a caption replaces the previous one. Elements:
 
@@ -45,6 +46,14 @@ def palette(brand):
     c = colors(brand)
     return c | {"ink": c["foreground"], "paper": c["background"], "white": "FFFFFF", "tint": mix(c["secondary"], "FFFFFF", 0.14),
                 "edge": mix(c["primary"], "FFFFFF", 0.25), "muted": mix(c["foreground"], "FFFFFF", 0.72)}
+
+
+def reverse(col):
+    """The palette on a dark ground (`ground: dark`, a `.lead` slide without clicks): light text and lines, boxes
+    as translucent white (`glass`) over whatever ground the slide has."""
+    light = mix(col["secondary"], "FFFFFF", 0.45)
+    return col | {"ink": "FFFFFF", "muted": mix("FFFFFF", col["foreground"], 0.74), "primary": "FFFFFF",
+                  "secondary": light, "edge": mix("FFFFFF", col["foreground"], 0.35), "glass": True}
 
 
 def rasterise(ddir, path, color=None, px=1024):
@@ -99,6 +108,8 @@ def prims(el, spec_size, col, ddir):
             "ghost": (None, col["edge"], col["ink"], col["muted"]),
         }[st]
         out = [{"p": "rect", "x": x, "y": y, "w": w, "h": h, "fill": fill, "line": line, "radius": el.get("radius", 3)}]
+        if col.get("glass") and st in ("tint", "paper"):
+            out[0] |= {"fill": "FFFFFF", "alpha": 0.14 if st == "tint" else 0.07, "line": col["edge"]}
         size = el.get("size", 13)
         paras = []
         if el.get("title"):
@@ -146,7 +157,8 @@ def prims(el, spec_size, col, ddir):
 
 def caption(s, y, w, h, col):
     """A step's message: a tinted band with an accent bar, as a `.takeaway`."""
-    return [{"p": "rect", "x": 0, "y": y, "w": w, "h": h, "fill": col["tint"], "line": None, "radius": 0},
+    band = {"fill": "FFFFFF", "alpha": 0.12} if col.get("glass") else {"fill": col["tint"]}
+    return [{"p": "rect", "x": 0, "y": y, "w": w, "h": h, "line": None, "radius": 0} | band,
             {"p": "rect", "x": 0, "y": y, "w": 4, "h": h, "fill": col["secondary"], "line": None, "radius": 0},
             {"p": "para", "x": 14, "y": y, "w": w - 20, "h": h, "align": "l", "anchor": "m",
              "paras": [{"s": s, "size": 14, "bold": True, "head": False, "color": col["primary"]}]}]
@@ -155,13 +167,17 @@ def caption(s, y, w, h, col):
 def layers(spec, col, ddir):
     """Primitives per step. A caption is a band at the bottom of the canvas, painted over the previous one."""
     W, H = spec["size"]
-    out = []
+    if spec.get("ground") == "dark":
+        col = reverse(col)
+    out, captioned = [], False
     for step in spec["steps"]:
         ps = [p for el in step.get("draw", []) for p in prims(el, spec["size"], col, ddir)]
         if step.get("caption"):
-            # exactly under the band: a wider clear shows as a paper strip on a tinted (`.lead`) slide
-            ps += prims({"clear": [0, H - CAPTION_H + 4, W, CAPTION_H - 4]}, spec["size"], col, ddir)
+            # erases the previous band only, exactly under it: a clear shows as a paper strip on a tinted slide
+            if captioned:
+                ps += prims({"clear": [0, H - CAPTION_H + 4, W, CAPTION_H - 4]}, spec["size"], col, ddir)
             ps += caption(step["caption"], H - CAPTION_H + 4, W, CAPTION_H - 4, col)
+            captioned = True
         out.append(ps)
     return out
 

@@ -337,7 +337,7 @@ local function sync(div)
   elseif quarto.doc.is_format("beamer") then
     local items, figs, legends = {}, {}, {}
     for _, f in ipairs(sync_figs(pts)) do
-      local credit = f.credit and ("\\\\[2pt]{\\tiny\\itshape\\color{brandForeground!60}" .. tex_esc(f.credit) .. "}") or ""
+      local credit = f.credit and ("\\\\[2pt]{\\tiny\\itshape\\color{.!60}" .. tex_esc(f.credit) .. "}") or ""
       local img = string.format("\\includegraphics[width=\\dimexpr\\linewidth-2pt,height=0.5\\textheight,keepaspectratio]{%s}", deck_file(f.poster or f.fig))
       if f.frame then img = "{\\setlength\\fboxsep{0pt}\\fcolorbox{brandForeground!25}{white}{" .. img .. "}}" end
       local span = string.format("%d-%s", click(f.first) + 1, f.last == n and "" or tostring(click(f.last + 1)))
@@ -623,7 +623,9 @@ local function logo(doc)
       out[#out + 1] = pandoc.Div(pandoc.Plain({ pandoc.Image({}, src) }), pandoc.Attr("", { "brand-logo" }))
     elseif src then
       -- first in the frame title: an overlay there takes no space, and its \hspace moves the title text right
-      b.content:insert(1, pandoc.RawInline("latex", "\\brandlogo{" .. src .. "}"))
+      -- on a `.lead` frame a white chip keeps a dark logo readable on the dark ground
+      local chip = b.attributes.lead and "[fill=white,rounded corners=2pt,inner sep=1.5pt]" or ""
+      b.content:insert(1, pandoc.RawInline("latex", "\\brandlogo" .. chip .. "{" .. src .. "}"))
     end
   end
   doc.blocks = out
@@ -672,12 +674,16 @@ local LEAD_JS = "<script>window.addEventListener('load', function () { function 
   .. " s.classList.toggle('lead-off', !!s.querySelector('.fragment.visible')); }); }"
   .. " ['ready', 'slidechanged', 'fragmentshown', 'fragmenthidden'].forEach(function (e) { Reveal.on(e, f); }); f(); });</script>"
 
+-- list items take their colour from the beamer theme, not the current colour: set it too
+local LEAD_TEX = "\\only<1>{\\color{white}\\setbeamercolor{itemize/enumerate body}{fg=white}"
+  .. "\\setbeamercolor{itemize item}{fg=white}}"
+
 local function lead_tints(doc)
   if quarto.doc.is_format("beamer") then  -- reverse contrast: light body text on the first overlay
     local out = {}
     for _, b in ipairs(doc.blocks) do
       out[#out + 1] = b
-      if b.t == "Header" and b.attributes.lead then out[#out + 1] = pandoc.RawBlock("latex", "\\only<1>{\\color{white}}") end
+      if b.t == "Header" and b.attributes.lead then out[#out + 1] = pandoc.RawBlock("latex", LEAD_TEX) end
     end
     doc.blocks = out
     return doc
