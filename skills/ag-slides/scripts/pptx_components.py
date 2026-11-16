@@ -391,7 +391,31 @@ def draw_sync(slide, comp, body, col, fonts, ddir, take=None, spot=None):
     gap = 14
     leg_h = 110  # a legend sits under its point, over the room of the points still to come
     y = body["y"] + max(0, (bottom - body["y"] - sum(hs) - gap * (len(hs) - 1)) / 2)
-    points, figs = [], []  # figs[k]: the figure group shown with point k (a point without fig keeps the last one)
+    # figs[k]: the figure group shown with point k (a point without fig keeps the last one); frames[k]: its
+    # groups in order, the `steps` frames after it, one click each
+    points, figs, frames = [], [], []
+
+    def fig_group(path, credit):
+        g = group(slide)
+        credit_h = 14 if credit else 0
+        with Image.open(ddir / path) as im:
+            iw, ih = im.size
+        avail = bottom - body["y"] - credit_h
+        scale = min(rw / iw, avail / ih)
+        w, h_img = iw * scale, ih * scale
+        fy = body["y"] + (avail - h_img) / 2
+        pic = g.shapes.add_picture(str(ddir / path), Pt(rx + (rw - w) / 2), Pt(fy), Pt(w), Pt(h_img))
+        pic.name = TAG + "fig"
+        if needs_frame(ddir / path, col["paper"]):
+            pic.line.color.rgb = RGBColor.from_string(mix(col["foreground"], "FFFFFF", 0.25))
+            pic.line.width = Pt(0.75)
+        if credit_h:
+            Painter(g, col, fonts).text(rx, fy + h_img + 2, rw, 12, credit, 9, mix(col["foreground"], "FFFFFF", 0.6), align=PP_ALIGN.CENTER)
+        return g
+
+    def steps(k):
+        return [[("out", a), ("in", b)] for a, b in zip(frames[k], frames[k][1:])]
+
     for it, h in zip(items, hs):
         g = group(slide)
         pa = Painter(g, col, fonts)
@@ -406,24 +430,11 @@ def draw_sync(slide, comp, body, col, fonts, ddir, take=None, spot=None):
         it["bottom"] = y + h
         y += h + gap
         if not it.get("fig"):
-            figs.append(figs[-1])
+            figs.append(frames[-1][-1])  # the last frame shown stays
+            frames.append([figs[-1]])
             continue
-        g = group(slide)
-        credit_h = 14 if it.get("credit") else 0
-        with Image.open(ddir / it["fig"]) as im:
-            iw, ih = im.size
-        avail = bottom - body["y"] - credit_h
-        scale = min(rw / iw, avail / ih)
-        w, h_img = iw * scale, ih * scale
-        fy = body["y"] + (avail - h_img) / 2
-        pic = g.shapes.add_picture(str(ddir / it["fig"]), Pt(rx + (rw - w) / 2), Pt(fy), Pt(w), Pt(h_img))
-        pic.name = TAG + "fig"
-        if needs_frame(ddir / it["fig"], col["paper"]):
-            pic.line.color.rgb = RGBColor.from_string(mix(col["foreground"], "FFFFFF", 0.25))
-            pic.line.width = Pt(0.75)
-        if credit_h:
-            Painter(g, col, fonts).text(rx, fy + h_img + 2, rw, 12, it["credit"], 9, mix(col["foreground"], "FFFFFF", 0.6), align=PP_ALIGN.CENTER)
-        figs.append(g)
+        frames.append([fig_group(f, it.get("credit")) for f in [it["fig"], *(it.get("steps") or [])]])
+        figs.append(frames[-1][0])
     for it, g in zip(items, figs):
         if it.get("fig") and it.get("legend"):
             with Image.open(ddir / it["legend"]) as im:
@@ -434,12 +445,14 @@ def draw_sync(slide, comp, body, col, fonts, ddir, take=None, spot=None):
             pic.name = TAG + "legend"
     sg = spot() if spot else None
     for k in range(1, len(items)):
-        swap = [("out", figs[k - 1]), ("in", figs[k])] if figs[k] is not figs[k - 1] else []
+        clicks += steps(k - 1)
+        swap = [("out", frames[k - 1][-1]), ("in", figs[k])] if figs[k] is not frames[k - 1][-1] else []
         leave = []
         if sg is not None and k == comp["spot"]:
             clicks.append([("in", sg)])
             leave = [("out", sg)]
         clicks.append([("in", points[k]), ("dim", points[k - 1])] + swap + leave)
+    clicks += steps(len(items) - 1)
     if take:
         clicks.append([("in", tg), ("dim", points[-1])])
     timeline(slide, clicks)

@@ -40,10 +40,20 @@ local function expand(items, talks)
   return out
 end
 
--- links tied to point s: point s shows on fragment s - 1 and gives way on fragment s (the next point);
--- a `.spotlight` inside the `.sync` after point k takes one more fragment there
-local function click(s, k)
-  return s - 1 + ((k and s > k) and 1 or 0)
+-- links tied to point s show from the fragment of point s (at[s]) to that of point s + 1: a point takes one
+-- fragment plus one per frame of its `steps`, a `.spotlight` after it one more (charter.lua `sync_clicks`)
+local function sync_clicks(pts)
+  local at, c = {}, 0
+  for _, p in ipairs(pts) do
+    if p.classes:includes("spotlight") then
+      c = c + 1
+    else
+      at[#at + 1] = c
+      c = c + 1
+      for _ in (p.attributes.steps or ""):gmatch("%S+") do c = c + 1 end
+    end
+  end
+  return at
 end
 
 local function by_step(items)
@@ -60,7 +70,7 @@ local function by_step(items)
   return always, steps
 end
 
-local function strip_html(items, n, k)
+local function strip_html(items, n, at)
   local always, steps = by_step(items)
   local out = {}
   for _, it in ipairs(always) do out[#out + 1] = anchor(it) end
@@ -69,8 +79,8 @@ local function strip_html(items, n, k)
     local inner = {}
     for _, it in ipairs(its) do inner[#inner + 1] = anchor(it) end
     local cell = '<span class="lk-step">' .. table.concat(inner) .. "</span>"
-    if s < n then cell = '<span class="lk-step fragment fade-out" data-fragment-index="' .. click(s + 1, k) .. '">' .. cell .. "</span>" end
-    if s > 1 then cell = '<span class="lk-step fragment fade-in" data-fragment-index="' .. click(s, k) .. '">' .. cell .. "</span>" end
+    if s < n then cell = '<span class="lk-step fragment fade-out" data-fragment-index="' .. at[s + 1] .. '">' .. cell .. "</span>" end
+    if s > 1 then cell = '<span class="lk-step fragment fade-in" data-fragment-index="' .. at[s] .. '">' .. cell .. "</span>" end
     cells[#cells + 1] = cell
   end
   if #cells > 0 then out[#out + 1] = '<span class="lk-steps">' .. table.concat(cells) .. "</span>" end
@@ -83,7 +93,7 @@ local function tex_link(it)
   return ico .. "\\href{" .. esc_tex(url) .. "}{" .. esc_tex(label) .. "}"
 end
 
-local function strip_tex(items, n, k)
+local function strip_tex(items, n, at)
   local always, steps = by_step(items)
   local out = {}
   for _, it in ipairs(always) do out[#out + 1] = tex_link(it) end
@@ -91,7 +101,7 @@ local function strip_tex(items, n, k)
   for s, its in pairs(steps) do
     local inner = {}
     for _, it in ipairs(its) do inner[#inner + 1] = tex_link(it) end
-    only[#only + 1] = string.format("\\only<%d-%s>{%s}", click(s, k) + 1, s == n and "" or click(s + 1, k), table.concat(inner, "\\quad "))
+    only[#only + 1] = string.format("\\only<%d-%s>{%s}", at[s] + 1, s == n and "" or at[s + 1], table.concat(inner, "\\quad "))
   end
   if #only > 0 then out[#out + 1] = table.concat(only) end
   -- the strip is pinned above the footer: a line of space at the end of the frame lifts a bottom takeaway clear of it;
@@ -111,10 +121,11 @@ function Pandoc(doc)
   local talks = cache and pandoc.json.decode(cache, false)
   local links = {}
   for k, v in pairs(pandoc.read("---\n" .. yml .. "\n---\n", "markdown").meta) do links[key(k)] = expand(v, talks) end
-  local blocks, pending, points, spot, start = pandoc.List(), nil, 0, nil, 0
+  local blocks, pending, pts, start = pandoc.List(), nil, {}, 0
   local function flush()
     if not pending then return end
-    local strip, tail = make(pending, points, spot)
+    local at = sync_clicks(pts)
+    local strip, tail = make(pending, #at, at)
     if tail then
       blocks:insert(start + 1, strip)
       blocks:insert(tail)
@@ -126,16 +137,12 @@ function Pandoc(doc)
     if b.t == "Header" and b.level <= 2 then
       flush()
       pending = b.level == 2 and links[key(pandoc.utils.stringify(b.content))] or nil
-      points, spot, start = 0, nil, #blocks + 1
+      pts, start = {}, #blocks + 1
     elseif b.t == "Div" and b.classes:includes("diagram") and pending then
       b.attributes["links"] = "1"  -- charter.lua leaves room for the strip under it in beamer
     elseif b.t == "Div" and b.classes:includes("sync") then
       for _, c in ipairs(b.content) do
-        if c.t == "Div" and c.classes:includes("spotlight") then
-          spot = points
-        elseif c.t == "Div" then
-          points = points + 1
-        end
+        if c.t == "Div" then pts[#pts + 1] = c end
       end
     end
     blocks:insert(b)

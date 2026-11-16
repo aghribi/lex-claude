@@ -47,7 +47,7 @@ def width(it):
     return len(it[1]) * CHAR_W + 8 + (0 if it[0] == "ref" else ICON + 2)
 
 
-def strip(slide, items, box, bottom, col, icons, points, spot=None):
+def strip(slide, items, box, bottom, col, icons, points, at=None):
     """Icon and hyperlinked label in rows that grow upwards from the footer. Links with a fourth field n
     (the n-th point of the slide's `.sync`) share one cell after the others and swap with their point."""
     always = [it for it in items if len(it) < 4]
@@ -80,7 +80,7 @@ def strip(slide, items, box, bottom, col, icons, points, spot=None):
             draw_link(g.shapes, it, box["x"] + sx, y, width(it), col, icons)
             sx += width(it) + 8
         groups[s] = g
-    add_to_clicks(slide, groups, points, spot)
+    add_to_clicks(slide, groups, points, at)
 
 
 def spotlight_on_top(slide):
@@ -93,21 +93,31 @@ def spotlight_on_top(slide):
             slide.shapes._spTree.append(sh._element)
 
 
-def add_to_clicks(slide, groups, points, spot=None):
-    """Point p shows on click p - 1 (pptx_components.py); the links of point s come in with it and leave with
-    point s + 1. A spotlight after point `spot` takes one more click there."""
+def sync_clicks(items, spot=None):
+    """Click that shows each point of a `.sync` (charter.lua `sync_clicks`): a point takes one, plus one per frame
+    of its `steps`; a spotlight after point `spot` one more."""
+    at, c = [], 0
+    for i, it in enumerate(items, 1):
+        at.append(c)
+        c += 1 + len(it.get("steps") or []) + (1 if spot == i else 0)
+    return at
+
+
+def add_to_clicks(slide, groups, points, at):
+    """Point p shows on click at[p - 1] (sync_clicks; the pptx click list starts at the first click); the shapes
+    of point s come in with it and leave with point s + 1."""
     seq = slide._element.find(".//p:seq/p:cTn/p:childTnLst", NS)
     if seq is None:
         return
     clicks = seq.findall("p:par", NS)
     ids = iter(range(max(int(c.get("id")) for c in slide._element.iter("{%s}cTn" % NS["p"])) + 1, 10 ** 6))
 
-    def at(p):
-        return p - 2 + (1 if spot is not None and p > spot else 0)
-
     for s, g in groups.items():
-        for kind, click in (("in", at(s)), ("out", at(s + 1))):
-            if click < 0 or click >= len(clicks) or (kind == "out" and s >= points):
+        for kind, p in (("in", s), ("out", s + 1)):
+            if kind == "out" and s >= points:
+                continue
+            click = at[p - 1] - 1
+            if click < 0 or click >= len(clicks):
                 continue
             inner = clicks[click].find("p:cTn/p:childTnLst/p:par/p:cTn/p:childTnLst", NS)
             inner.append(parse_xml(f'<p:root xmlns:p="{NS["p"]}">' + effect(kind, g.shape_id, ids, "withEffect") + "</p:root>")[0])
@@ -138,7 +148,7 @@ def main(ddir):
     geo = yaml.safe_load((cdir / "build" / "geometry.yml").read_text())
     icons = ddir / "_extensions" / cfg["name"] / "icons"
     comps = ddir / "_components.json"
-    points = {c["title"].replace("’", "'"): (len(c["items"]), c.get("spot"))
+    points = {c["title"].replace("’", "'"): (len(c["items"]), sync_clicks(c["items"], c.get("spot")))
               for c in json.loads(comps.read_text())["slides"]
               if c["kind"] == "sync"} if comps.exists() else {}
     prs = Presentation(pptx)

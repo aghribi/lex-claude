@@ -231,7 +231,8 @@ end
 
 -- `.sync`: points on the left (`::: {.point fig="..." credit="..."}`), each with its figure on the right
 -- (a point without `fig` keeps the previous one; `icon=` replaces the bullet; `legend=` puts the figure's legend,
--- cropped out of it, in the left column under the points). Each click shows the next point and swaps the figure;
+-- cropped out of it, in the left column under the points; `steps="b.png c.png"` adds frames after `fig`, one per
+-- click, before the next point). Each click shows the next point and swaps the figure;
 -- earlier points half-fade. A `.takeaway` after it
 -- comes on the next click, at the bottom of the slide (on its own, it comes on the first click).
 -- A `.spotlight` inside it, after point k, takes the click between point k and point k + 1.
@@ -247,9 +248,18 @@ local function sync_points(div)
   return pts, spot, k
 end
 
--- click that shows point i of a `.sync` whose spotlight follows point k (revealjs fragment index; beamer overlay - 1)
-local function sync_click(i, k)
-  return i - 1 + ((k and i > k) and 1 or 0)
+-- clicks of a `.sync`: point i takes one, plus one per frame of its `steps`; a spotlight after point k takes one.
+-- at[i]: the click that shows point i (revealjs fragment index; beamer overlay - 1); at[n + 1]: all of them
+local function sync_clicks(pts, k)
+  local at, c = {}, 0
+  for i, p in ipairs(pts) do
+    at[i] = c
+    c = c + 1
+    for _ in (p.attributes.steps or ""):gmatch("%S+") do c = c + 1 end
+    if k == i then c = c + 1 end
+  end
+  at[#pts + 1] = c
+  return at
 end
 
 local function frag(div, cls, idx)
@@ -262,7 +272,7 @@ end
 -- itself in revealjs, `fig` stays the picture elsewhere; `poster` stands in for an animated `fig` in beamer and pptx
 local framed  -- figures whose border differs from the slide: diagram.py lists them in _diagrams/frames.json
 
-local function sync_figs(pts)
+local function sync_figs(pts, at)
   if not framed then
     framed = {}
     local f = io.open(deck_file("_diagrams/frames.json"), "r")
@@ -271,13 +281,20 @@ local function sync_figs(pts)
       f:close()
     end
   end
+  -- each frame: shown from click `on` (nil: from the start) until click `off` (nil: to the end)
   local out = {}
   for i, p in ipairs(pts) do
     if p.attributes.fig then
-      if #out > 0 then out[#out].last = i - 1 end
-      out[#out + 1] = { first = i, last = #pts, fig = p.attributes.fig, live = p.attributes.live, credit = p.attributes.credit,
-                        poster = p.attributes.poster,
-                        frame = framed[p.attributes.fig], legend = p.attributes.legend }
+      if #out > 0 then out[#out].off = at[i] end
+      local on = i > 1 and at[i] or nil
+      local files = { p.attributes.fig }
+      for f in (p.attributes.steps or ""):gmatch("%S+") do files[#files + 1] = f end
+      for j, file in ipairs(files) do
+        if #out > 0 and j > 1 then out[#out].off = at[i] + j - 1 end
+        out[#out + 1] = { first = i, on = j > 1 and at[i] + j - 1 or on, fig = file, live = p.attributes.live,
+                          credit = p.attributes.credit, poster = j == 1 and p.attributes.poster or nil,
+                          frame = framed[file], legend = j == 1 and p.attributes.legend or nil }
+      end
     end
   end
   return out
@@ -288,8 +305,9 @@ local spotlight_html, spotlight_tex
 local function sync(div)
   local pts, spot, k = sync_points(div)
   local n = #pts
-  local function click(i) return sync_click(i, k) end
-  sync_steps = n + (spot and 1 or 0)
+  local at = sync_clicks(pts, k)
+  local function click(i) return at[i] end
+  sync_steps = at[n + 1]
   last_step = sync_steps
   if quarto.doc.is_format("revealjs") then
     local text, figs = {}, {}
@@ -306,7 +324,8 @@ local function sync(div)
     end
     -- point i shows on fragment i - 1; a figure fades in with its first point and out with the next figure
     local live = false
-    for _, f in ipairs(sync_figs(pts)) do
+    local frames = sync_figs(pts, at)
+    for _, f in ipairs(frames) do
       live = live or f.live ~= nil
       local media = f.live
         and pandoc.RawBlock("html", '<div class="sync-live"><iframe src="' .. f.live .. '" loading="lazy"></iframe></div>')
@@ -315,15 +334,15 @@ local function sync(div)
       if f.frame then fig.classes:insert("framed") end
       if f.credit and not f.live then fig.content:insert(pandoc.Div(pandoc.Plain(pandoc.Str(f.credit)), pandoc.Attr("", { "sync-credit" }))) end
       local function shown(d)
-        if f.last < n then d = frag(pandoc.Div({ d }), "fade-out", click(f.last + 1)) end
-        if f.first > 1 then d = frag(pandoc.Div({ d }), "fade-in", click(f.first)) end
+        if f.off then d = frag(pandoc.Div({ d }), "fade-out", f.off) end
+        if f.on then d = frag(pandoc.Div({ d }), "fade-in", f.on) end
         d.classes:insert("sync-cell")
         return d
       end
       figs[#figs + 1] = shown(fig)
       if f.legend then  -- under its own point, over the room of the points still to come
         local leg = pandoc.Div({ pandoc.Plain({ pandoc.Image({}, f.legend) }) }, pandoc.Attr("", { "sync-legend", framed[f.legend] and "framed" or nil }))
-        if f.last < n then leg = frag(pandoc.Div({ leg }), "fade-out", click(f.last + 1)) end
+        if f.off then leg = frag(pandoc.Div({ leg }), "fade-out", f.off) end
         leg.classes:insert("sync-legend-box")
         text[f.first].content:insert(leg)
       end
@@ -332,15 +351,15 @@ local function sync(div)
     -- a live page takes the right half of the slide and covers the template mark: draw the mark in the left half
     local mark = live and charter_mark()
     if mark then out[#out + 1] = pandoc.Div(pandoc.Plain({ pandoc.Image({}, mark) }), pandoc.Attr("", { "sync-live-mark" })) end
-    if spot then out[#out + 1] = frag(spotlight_html(spot), "fade-in-then-out", k) end
+    if spot then out[#out + 1] = frag(spotlight_html(spot), "fade-in-then-out", click(k + 1) - 1) end
     return pandoc.Div(out, pandoc.Attr("", { "sync" }))
   elseif quarto.doc.is_format("beamer") then
     local items, figs, legends = {}, {}, {}
-    for _, f in ipairs(sync_figs(pts)) do
+    for _, f in ipairs(sync_figs(pts, at)) do
       local credit = f.credit and ("\\\\[2pt]{\\tiny\\itshape\\color{.!60}" .. tex_esc(f.credit) .. "}") or ""
       local img = string.format("\\includegraphics[width=\\dimexpr\\linewidth-2pt,height=0.5\\textheight,keepaspectratio]{%s}", deck_file(f.poster or f.fig))
       if f.frame then img = "{\\setlength\\fboxsep{0pt}\\fcolorbox{brandForeground!25}{white}{" .. img .. "}}" end
-      local span = string.format("%d-%s", click(f.first) + 1, f.last == n and "" or tostring(click(f.last + 1)))
+      local span = string.format("%d-%s", (f.on or 0) + 1, f.off and tostring(f.off) or "")
       figs[#figs + 1] = string.format("\\only<%s>{%s%s}", span, img, credit)
       if f.legend then legends[f.first] = { span = span, file = deck_file(f.legend) } end
     end
@@ -355,12 +374,13 @@ local function sync(div)
           .. "\\node[anchor=north,inner sep=0pt,xshift=0.5\\linewidth,yshift=-1ex] at (%s |- %s-end) {\\only<%s>{\\includegraphics[width=0.85\\linewidth,height=0.25\\textheight,keepaspectratio]{%s}}};}",
           id, tex, id, id, id, leg.span, leg.file)
       end
-      items[#items + 1] = string.format("\\item<%d-> {\\color<%d->{brandForeground!40}%s\\par}", click(i) + 1, click(i) + 2, tex)
+      local dim = at[i + 1] - ((k == i) and 1 or 0) + 1  -- overlay of the next point or the spotlight
+      items[#items + 1] = string.format("\\item<%d-> {\\color<%d->{brandForeground!40}%s\\par}", click(i) + 1, dim, tex)
     end
     return pandoc.RawBlock("latex", table.concat({
       "\\begin{columns}[c]", "\\begin{column}{0.42\\textwidth}", "\\setbeamerfont{itemize/enumerate body}{size=\\footnotesize}", "\\begin{itemize}\\setlength{\\itemsep}{3pt}", table.concat(items, "\n"), "\\end{itemize}",
       "\\end{column}", "\\begin{column}{0.56\\textwidth}", "\\centering", table.concat(figs, "\n"), "\\end{column}", "\\end{columns}",
-      spot and spotlight_tex(spot, k + 1) or "" }, "\n"))
+      spot and spotlight_tex(spot, click(k + 1)) or "" }, "\n"))
   end
   return pandoc.BulletList({ { pandoc.Plain({ pandoc.Str("sync") }) } })  -- removed by pptx_components.py
 end
@@ -576,8 +596,10 @@ local function record(doc)
     elseif b.t == "Div" and title and b.classes:includes("sync") then
       local items, pts, spot, k = {}, sync_points(b)
       for _, c in ipairs(pts) do
+        local steps = {}
+        for f in (c.attributes.steps or ""):gmatch("%S+") do steps[#steps + 1] = f end
         items[#items + 1] = { runs = runs(c.content), fig = c.attributes.poster or c.attributes.fig, credit = c.attributes.credit, icon = c.attributes.icon,
-                              legend = c.attributes.legend }
+                              legend = c.attributes.legend, steps = #steps > 0 and steps or nil }
       end
       slides[#slides + 1] = { title = title, kind = "sync", items = items, spot = k }
       if spot then
